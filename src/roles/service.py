@@ -1,0 +1,152 @@
+"""Role service."""
+from uuid import UUID
+from typing import Optional
+from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.roles.repository import RoleRepository
+from src.users.repository import UserRepository
+from src.families.repository import FamilyRepository
+from src.roles.schemas import (
+    RoleRead,
+    RoleListResponse,
+    UserRoleUpdateRequest,
+    UserRoleUpdateResponse,
+    UserRoleSummary,
+)
+from src.roles.exceptions import (
+    RoleNotFound,
+    InvalidRoleId,
+    MultipleRolesNotAllowed,
+)
+from src.roles.models import Role, UserRole
+from src.users.models import User
+from src.families.models import Family
+from src.users.exceptions import UserNotFound, FamilySoftDeletedForUsers
+from src.families.exceptions import FamilyNotFound
+
+
+class RoleService:
+    """Service for role business logic."""
+    
+    def __init__(self, session: AsyncSession):
+        self.repository = RoleRepository(session)
+        self.user_repository = UserRepository(session)
+        self.family_repository = FamilyRepository(session)
+        self.session = session
+    
+    async def list_roles(
+        self,
+    ) -> RoleListResponse:
+        """List all available predefined roles (global)."""
+        roles = await self.repository.get_all()
+        
+        role_reads = [
+            RoleRead(
+                id=role.id,
+                name=role.name,
+                permissions=role.permissions,
+            )
+            for role in roles
+        ]
+        
+        return RoleListResponse(items=role_reads)
+    
+    async def update_user_roles(
+        self,
+        family_id: UUID,
+        user_id: UUID,
+        data: UserRoleUpdateRequest,
+        current_user_id: UUID,
+        current_user_is_superadmin: bool,
+        if_match: Optional[str] = None,
+    ) -> UserRoleUpdateResponse:
+        """Update user roles within a family (replace existing roles) with ETag validation (business logic in service)."""
+        # Verify family exists and is not soft-deleted
+        family = await self.family_repository.get_by_id(family_id)
+        if not family:
+            raise FamilyNotFound(str(family_id))
+        
+        if family.is_del:
+            raise FamilySoftDeletedForUsers()
+        
+        # Get user
+        user = await self.user_repository.get_by_id(user_id)
+        if not user:
+            raise UserNotFound(str(user_id))
+        
+        # If soft-deleted, return 404
+        if user.is_del:
+            raise UserNotFound(str(user_id))
+        
+        # ETag validation (business logic in service) - REQUIRED per spec
+        if not if_match:
+            from src.exceptions import PreconditionRequiredError
+            raise PreconditionRequiredError(
+                message="If-Match header required for update operations.",
+                details=[{"field": "If-Match", "issue": "If-Match header is required"}],
+            )
+        
+        from src.utils import generate_etag
+        from src.exceptions import PreconditionFailedError
+        current_etag = generate_etag(user.updated_at)
+        if if_match != current_etag:
+            raise PreconditionFailedError(
+                message="Resource version mismatch. The resource was modified by another user.",
+                details=[{"field": "etag", "issue": "Resource has been modified since retrieval. Please fetch the latest version and retry."}],
+            )
+        
+        # User must have status = Active or PendingActivation (cannot update roles if SoftDeleted)
+        if user.is_del:
+            from src.exceptions import ValidationError
+            raise ValidationError(
+                message="User is SoftDeleted (cannot update roles).",
+                error_code="BUSINESS_RULE_FAILED",
+                details=[{"field": "user", "issue": "User is SoftDeleted (cannot update roles)"}],
+            )
+        
+        # Validate role_ids: must contain exactly one role ID (single role per user) or empty array (remove all roles)
+        if len(data.role_ids) > 1:
+            raise MultipleRolesNotAllowed()
+        
+        # Validate all role IDs exist (if any provided)
+        roles = []
+        for role_id in data.role_ids:
+            role = await self.repository.get_by_id(role_id)
+            if not role:
+                raise InvalidRoleId(str(role_id))
+            roles.append(role)
+        
+        # Get existing user roles for this family
+        existing_user_roles = await self.repository.get_user_roles_by_user_and_family(user_id, family_id)
+        
+        # Soft delete all existing user roles for this family
+        for existing_user_role in existing_user_roles:
+            await self.repository.delete_user_role(existing_user_role, current_user_id)
+        
+        # Create new user role assignments (single role per user)
+        new_user_roles = []
+        for role in roles:
+            user_role = UserRole(
+                user_id=user_id,
+                family_id=family_id,
+                role_id=role.id,
+                created_by=current_user_id,
+                is_del=False,
+            )
+            new_user_role = await self.repository.create_user_role(user_role)
+            new_user_roles.append(new_user_role)
+        
+        # Build response with role summaries
+        role_summaries = [
+            UserRoleSummary(
+                id=role.id,
+                name=role.name,
+            )
+            for role in roles
+        ]
+        
+        return UserRoleUpdateResponse(
+            user_id=user_id,
+            family_id=family_id,
+            roles=role_summaries,
+        )

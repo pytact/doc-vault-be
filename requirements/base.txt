@@ -1,0 +1,27 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+
+# Validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+email-validator==2.2.0  # REQUIRED for EmailStr
+
+# Utils
+python-dotenv==1.0.0
+
+# Password hashing
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1  # CRITICAL: Pin to 4.0.1 for passlib compatibility
+
+# JWT tokens
+PyJWT==2.8.0  # REQUIRED for import jwt
+
+# Form data support (required for OAuth2 Form(...) parameters)
+python-multipart==0.0.6
+
