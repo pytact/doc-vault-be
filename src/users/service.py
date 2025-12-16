@@ -24,7 +24,7 @@ from src.users.schemas import (
     UserActivationInfo,
     UserProfileRead,
     UserProfileUpdate,
-    PasswordChangeRequest,
+    UserMeRead,
 )
 from src.users.exceptions import (
     UserNotFound,
@@ -235,6 +235,53 @@ class UserService:
         prev_page = None
         if query.page > 1:
             prev_page = f"/v1/families/{family_id}/users?page={query.page - 1}&page_size={query.page_size}&sort_by={query.sort_by}&sort_order={query.sort_order}"
+            if query.status:
+                prev_page += f"&status={query.status}"
+        
+        return UserPaginatedResponse(
+            items=user_reads,
+            total=total,
+            page=query.page,
+            page_size=query.page_size,
+            total_pages=total_pages,
+            next_page=next_page,
+            prev_page=prev_page,
+        )
+    
+    async def list_all_users(
+        self,
+        query: UserListQuery,
+    ) -> UserPaginatedResponse:
+        """List all users with pagination, filtering, and sorting."""
+        # Get users with role information
+        rows, total = await self.repository.list_all_with_pagination(
+            page=query.page,
+            page_size=query.page_size,
+            status_filter=query.status,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+        )
+        
+        # Convert to response schemas
+        user_reads = []
+        for row in rows:
+            user, user_role, role, family = row
+            user_read = self._user_to_list_schema(user, user_role, role, family)
+            user_reads.append(user_read)
+        
+        # Calculate pagination metadata
+        total_pages = calculate_total_pages(total, query.page_size)
+        
+        # Build next_page and prev_page URLs
+        next_page = None
+        if query.page < total_pages:
+            next_page = f"/v1/users?page={query.page + 1}&page_size={query.page_size}&sort_by={query.sort_by}&sort_order={query.sort_order}"
+            if query.status:
+                next_page += f"&status={query.status}"
+        
+        prev_page = None
+        if query.page > 1:
+            prev_page = f"/v1/users?page={query.page - 1}&page_size={query.page_size}&sort_by={query.sort_by}&sort_order={query.sort_order}"
             if query.status:
                 prev_page += f"&status={query.status}"
         
@@ -510,8 +557,13 @@ class UserService:
         )
         await self.role_repository.create_user_role(user_role)
         
-        # TODO: Send invitation email via SMTP (handled by email service)
-        # This will be implemented separately
+        # Send invitation email via Celery task
+        from src.celery_worker import send_invitation_email_task
+        send_invitation_email_task.delay(
+            user_email=user.email,
+            invitation_token=user.invite_token,
+            family_name=family.name,
+        )
         
         return InvitationCreateResponse(
             id=user.id,
@@ -585,8 +637,14 @@ class UserService:
         await self.session.commit()
         await self.session.refresh(user)
         
-        # TODO: Send invitation email via SMTP (handled by email service)
-        # This will be implemented separately
+        # Send invitation email via Celery task
+        from src.celery_worker import send_invitation_email_task
+        family_name = family.name if family else None
+        send_invitation_email_task.delay(
+            user_email=user.email,
+            invitation_token=user.invite_token,
+            family_name=family_name,
+        )
         
         return InvitationResendResponse(
             user_id=user.id,
@@ -810,6 +868,9 @@ class UserService:
                 headers={
                     "ETag": etag,
                     "Last-Modified": last_modified,
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
                 },
                 response_type="fastapi",  # Router uses this to return FastAPI Response
             )
@@ -850,6 +911,135 @@ class UserService:
             headers={
                 "ETag": etag,
                 "Last-Modified": last_modified,
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+            response_type="standard",  # Router uses this to return StandardResponse
+        )
+    
+    async def get_current_user_me(
+        self,
+        user_id: UUID,
+        if_none_match: Optional[str] = None,
+    ) -> ServiceResponse[UserMeRead]:
+        """Get current authenticated user's details with full family and role objects (business logic in service)."""
+        # Log the user_id being requested
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"get_current_user_me: Service called with user_id={user_id}")
+        
+        # Get user
+        user = await self.repository.get_by_id(user_id)
+        if not user:
+            error_msg = f"get_current_user_me: User not found with user_id={user_id}"
+            logger.error(error_msg)
+            raise UserNotFound(str(user_id))
+        
+        logger.info(f"get_current_user_me: Found user - id={user.id}, email={user.email}")
+        
+        # If soft-deleted, return 401 (force logout)
+        if user.is_del:
+            from src.users.exceptions import UserSoftDeleted
+            raise UserSoftDeleted()
+        
+        # Get user's role and family information
+        role_info = await self.repository.get_user_role_info(user_id)
+        family_obj = None
+        role_obj = None
+        
+        if role_info:
+            user_role, role, family = role_info
+            if family:
+                # Check if family is soft-deleted (force logout)
+                if family.is_del:
+                    from src.users.exceptions import FamilySoftDeletedForUsers
+                    raise FamilySoftDeletedForUsers()
+                
+                # Map family to FamilyRead schema
+                from src.families.schemas import FamilyRead
+                # Map family status to API format
+                family_status_api = FAMILY_STATUS_API_SOFT_DELETED if family.is_del else FAMILY_STATUS_API_ACTIVE
+                family_obj = FamilyRead(
+                    id=family.id,
+                    name=family.name,
+                    status=family_status_api,
+                    is_del=family.is_del,
+                    created_at=family.created_at,
+                    created_by=family.created_by,
+                    updated_at=family.updated_at,
+                    updated_by=family.updated_by,
+                    deleted_at=family.deleted_at,
+                    deleted_by=family.deleted_by,
+                )
+            
+            if role:
+                # Map role to RoleRead schema
+                from src.roles.schemas import RoleRead
+                role_obj = RoleRead(
+                    id=role.id,
+                    name=role.name,
+                    permissions=role.permissions,
+                )
+        
+        # Generate ETag (business logic in service)
+        etag = generate_etag(user.updated_at)
+        last_modified = format_last_modified(user.updated_at)
+        
+        # Check If-None-Match (business logic validation in service)
+        if if_none_match and if_none_match == etag:
+            # Return 304 Not Modified (business logic decision in service)
+            return ServiceResponse(
+                data=None,  # 304 has no body
+                status_code=status.HTTP_304_NOT_MODIFIED,
+                headers={
+                    "ETag": etag,
+                    "Last-Modified": last_modified,
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+                response_type="fastapi",  # Router uses this to return FastAPI Response
+            )
+        
+        # Map status to API format
+        status_api = self._map_user_status_to_api(user)
+        
+        # Build UserMeRead response with full objects
+        user_me_read = UserMeRead(
+            id=user.id,
+            email=user.email,
+            name=user.email,  # TODO: Use user.name when field is added
+            status=status_api,
+            family=family_obj,
+            role=role_obj,
+            activated_at=user.activated_at,
+            invite_sent_at=user.invite_sent_at,
+            invite_expire_at=user.invite_expire_at,
+            invited_by=user.invited_by,
+            is_del=user.is_del,
+            password_rules=self._get_password_rules(disallow_last_5=True),
+            created_at=user.created_at,
+            created_by=user.created_by,
+            updated_at=user.updated_at,
+            updated_by=user.updated_by,
+            deleted_at=user.deleted_at,
+            deleted_by=user.deleted_by,
+        )
+        
+        # Attach ETag for router to set headers
+        user_me_read._etag = etag
+        user_me_read._last_modified = last_modified
+        
+        return ServiceResponse(
+            data=user_me_read,
+            status_code=status.HTTP_200_OK,
+            headers={
+                "ETag": etag,
+                "Last-Modified": last_modified,
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
             },
             response_type="standard",  # Router uses this to return StandardResponse
         )
@@ -985,66 +1175,3 @@ class UserService:
         profile_read._last_modified = format_last_modified(user.updated_at)
         
         return profile_read
-    
-    async def change_password(
-        self,
-        user_id: UUID,
-        data: PasswordChangeRequest,
-    ) -> None:
-        """Change current authenticated user's password (business logic in service)."""
-        # Get user
-        user = await self.repository.get_by_id(user_id)
-        if not user:
-            raise UserNotFound(str(user_id))
-        
-        # If soft-deleted, return 401 (force logout)
-        if user.is_del:
-            from src.users.exceptions import UserSoftDeleted
-            raise UserSoftDeleted()
-        
-        # Get user's family information
-        role_info = await self.repository.get_user_role_info(user_id)
-        if role_info:
-            user_role, role, family = role_info
-            if family:
-                # Check if family is soft-deleted (force logout)
-                if family.is_del:
-                    from src.users.exceptions import FamilySoftDeletedForUsers
-                    raise FamilySoftDeletedForUsers()
-        
-        # User must have status = Active (cannot change password if PendingActivation or SoftDeleted)
-        status_api = self._map_user_status_to_api(user)
-        if status_api != USER_STATUS_API_ACTIVE:
-            from src.exceptions import ValidationError
-            raise ValidationError(
-                message="User status is not Active (cannot change password).",
-                error_code="BUSINESS_RULE_FAILED",
-                details=[{"field": "status", "issue": "User status is not Active (cannot change password)"}],
-            )
-        
-        # Verify current password
-        if not verify_password(data.current_password, user.hash_password):
-            raise IncorrectPassword()
-        
-        # Validate new password (with history check)
-        password_errors = self._validate_password(data.new_password, check_history=True, user=user)
-        if password_errors:
-            raise PasswordValidationFailed(password_errors)
-        
-        # TODO: Check password history (last 5 passwords)
-        # For now, skip this check - will be implemented when password history model is added
-        # if await self._is_password_in_history(user, data.new_password):
-        #     raise PasswordReuseViolation()
-        
-        # Update password
-        user.hash_password = get_password_hash(data.new_password)
-        user.updated_at = datetime.now(timezone.utc)
-        user.updated_by = user_id
-        
-        # TODO: Update password history (store old password hash in history)
-        # This will be implemented when password history model is added
-        
-        await self.session.commit()
-        await self.session.refresh(user)
-        
-        return None

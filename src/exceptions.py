@@ -3,7 +3,7 @@ import re
 from typing import Any
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from asyncpg.exceptions import (
@@ -239,6 +239,43 @@ async def validation_exception_handler(
                 "details": details,
             },
             "message": "Validation failed",
+        },
+    )
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
+async def response_validation_exception_handler(
+    request: Request, exc: ResponseValidationError
+) -> JSONResponse:
+    """Handle response validation errors (usually occurs when exception is raised but response model validation still runs)."""
+    # Get X-Request-ID from request state (set by middleware) or generate new one
+    request_id = getattr(request.state, "request_id", None)
+    if not request_id:
+        from src.utils import generate_request_id
+        request_id = generate_request_id()
+    
+    # Extract validation error details (ResponseValidationError has errors() method like RequestValidationError)
+    details = []
+    try:
+        for error in exc.errors():
+            error_loc = ".".join(str(loc) for loc in error.get("loc", []))
+            error_msg = error.get("msg", "Validation error")
+            details.append({"field": error_loc, "issue": error_msg})
+    except (AttributeError, TypeError):
+        # Fallback if errors() method doesn't exist or returns unexpected format
+        details.append({"field": "response", "issue": "Response validation failed"})
+    
+    # If this is a response validation error, it usually means an exception was raised
+    # but FastAPI still tried to validate the response model. Return a 500 error.
+    response = JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": {
+                "code": "RESPONSE_VALIDATION_ERROR",
+                "details": details,
+            },
+            "message": "Response validation failed. This may occur when an exception is raised during request processing.",
         },
     )
     response.headers["X-Request-ID"] = request_id

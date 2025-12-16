@@ -78,36 +78,28 @@ class UserApiDocs:
     }
     
     get_profile: ClassVar[dict] = {
-        "summary": "Get current authenticated user's profile information",
+        "summary": "Get user profile by user ID",
         "description": (
-            "Retrieves current authenticated user's profile information. All authenticated users can access their own profile. "
-            "Returns user details including email, name, status, family information, password rules, and audit fields. "
-            "Email is immutable and read-only. If user is SoftDeleted mid-session, returns 401 and forces logout. "
+            "Retrieves user profile information by user_id. Users can access their own profile (user_id matches JWT sub). "
+            "SuperAdmin can access any user's profile. FamilyAdmin can access users in their own family only. "
+            "Member can only access their own profile. Returns user details including email, name, status, family information, "
+            "password rules, and audit fields. Email is immutable and read-only. If user is SoftDeleted mid-session, returns 401 and forces logout. "
             "If family is SoftDeleted mid-session, returns 401 and forces logout. can_edit_profile = true only if user.status = Active. "
             "Password rules are returned for UI display (for change password modal). Supports ETag for conditional requests."
         ),
     }
     
     update_profile: ClassVar[dict] = {
-        "summary": "Update current authenticated user's profile name",
+        "summary": "Update current authenticated user's profile (name and/or password)",
         "description": (
-            "Updates current authenticated user's profile name. All authenticated users can update their own profile. "
-            "Email cannot be updated (immutable field). Only name field can be updated. User must have status = Active "
+            "Updates current authenticated user's profile. All authenticated users can update their own profile. "
+            "SuperAdmin can update any user's profile. FamilyAdmin can update users in their own family only. "
+            "Email cannot be updated (immutable field). Both name and password can be updated. "
+            "When updating password, current_password is required. Password must meet strong password policy: "
+            "minimum 12 characters, at least one uppercase letter, lowercase letter, number, and special character. "
+            "Cannot match any of the last 5 passwords. User must have status = Active "
             "(cannot update if PendingActivation or SoftDeleted). If user is SoftDeleted mid-session, returns 401 and forces logout. "
             "If family is SoftDeleted mid-session, returns 401 and forces logout. Requires If-Match header for ETag validation "
             "to prevent concurrent modification conflicts."
-        ),
-    }
-    
-    change_password: ClassVar[dict] = {
-        "summary": "Change current authenticated user's password",
-        "description": (
-            "Changes current authenticated user's password. All authenticated users can change their own password. "
-            "Current password must be verified (match stored hash). New password must meet strong password policy: "
-            "minimum 12 characters, at least one uppercase letter, lowercase letter, number, and special character. "
-            "Cannot match any of the last 5 passwords. User must have status = Active (cannot change password if "
-            "PendingActivation or SoftDeleted). If user is SoftDeleted mid-session, returns 401 and forces logout. "
-            "If family is SoftDeleted mid-session, returns 401 and forces logout. Password validation errors are detailed "
-            "(per rule failure). Password history is checked (last 5 passwords)."
         ),
     }

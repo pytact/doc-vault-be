@@ -54,7 +54,7 @@ async def logout(
     """Logout user."""
     await api.logout()
     return StandardResponse(
-        data=None,
+        data={},
         message="Logout successful",
     )
 

@@ -1,9 +1,13 @@
 """User schemas."""
 from uuid import UUID
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from src.schemas import PagedCollection
+
+if TYPE_CHECKING:
+    from src.families.schemas import FamilyRead
+    from src.roles.schemas import RoleRead
 
 
 class UserListQuery(BaseModel):
@@ -123,13 +127,6 @@ class InvitationResendResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class InvitationValidateQuery(BaseModel):
-    """Query schema for validating invitation token."""
-    token: str = Field(..., description="Invitation token", min_length=1)
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
 class PasswordRules(BaseModel):
     """Password rules for account setup."""
     min_length: int
@@ -190,6 +187,30 @@ class InvitationActivateResponse(BaseModel):
 
 # ==================== Profile Management Schemas ====================
 
+class UserMeRead(BaseModel):
+    """Response schema for current user's details with full related objects."""
+    id: UUID
+    email: str
+    name: str
+    status: str  # "Active", "PendingActivation", or "SoftDeleted"
+    family: Optional["FamilyRead"] = None  # Full family object
+    role: Optional["RoleRead"] = None  # Full role object
+    activated_at: Optional[datetime] = None
+    invite_sent_at: Optional[datetime] = None
+    invite_expire_at: Optional[datetime] = None
+    invited_by: Optional[UUID] = None
+    is_del: bool
+    password_rules: "PasswordRules"
+    created_at: datetime
+    created_by: Optional[UUID] = None
+    updated_at: datetime
+    updated_by: Optional[UUID] = None
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[UUID] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserProfileRead(BaseModel):
     """Response schema for current user profile."""
     id: UUID
@@ -219,9 +240,14 @@ class UserProfileUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class PasswordChangeRequest(BaseModel):
-    """Request schema for changing password."""
-    current_password: str = Field(..., description="Current password", min_length=1)
-    new_password: str = Field(..., description="New password", min_length=12)
+# Resolve forward references after all schemas are defined
+def _resolve_forward_refs():
+    """Resolve forward references for UserMeRead."""
+    from src.families.schemas import FamilyRead
+    from src.roles.schemas import RoleRead
     
-    model_config = ConfigDict(from_attributes=True)
+    UserMeRead.model_rebuild()
+
+
+# Call at module level to resolve forward references
+_resolve_forward_refs()

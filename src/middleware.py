@@ -23,5 +23,17 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # Add X-Request-ID to response header
         response.headers["X-Request-ID"] = request_id
         
+        # Add cache control headers for all API endpoints to prevent browser caching
+        # This ensures sensitive data is never cached by browsers
+        # CRITICAL: This prevents security issues where cached authenticated responses
+        # are served to unauthenticated requests
+        if request.url.path.startswith("/v1/"):
+            # Always set aggressive cache control headers (override any existing ones)
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            # Vary header ensures responses are cached separately per Authorization header
+            response.headers["Vary"] = "Authorization"
+        
         return response
 

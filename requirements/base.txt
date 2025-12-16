@@ -25,3 +25,9 @@ PyJWT==2.8.0  # REQUIRED for import jwt
 # Form data support (required for OAuth2 Form(...) parameters)
 python-multipart==0.0.6
 
+# Redis
+redis==5.0.1
+
+# Celery
+celery==5.3.4
+

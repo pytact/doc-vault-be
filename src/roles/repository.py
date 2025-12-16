@@ -68,13 +68,27 @@ class RoleRepository:
         self, user_id: UUID, family_id: UUID
     ) -> list[UserRole]:
         """Get all user roles by user_id and family_id (not soft-deleted)."""
+        from sqlalchemy import false
         result = await self.session.execute(
             select(UserRole)
             .where(
                 UserRole.user_id == user_id,
                 UserRole.family_id == family_id,
-                UserRole.is_del == False,
+                UserRole.is_del.is_(false()),
                 UserRole.deleted_at.is_(None),
+            )
+        )
+        return list(result.scalars().all())
+    
+    async def get_all_user_roles_by_user_and_family(
+        self, user_id: UUID, family_id: UUID
+    ) -> list[UserRole]:
+        """Get ALL user roles by user_id and family_id (including soft-deleted)."""
+        result = await self.session.execute(
+            select(UserRole)
+            .where(
+                UserRole.user_id == user_id,
+                UserRole.family_id == family_id,
             )
         )
         return list(result.scalars().all())
@@ -84,6 +98,19 @@ class RoleRepository:
     ) -> UserRole:
         """Create a new user role assignment."""
         self.session.add(user_role)
+        await self.session.commit()
+        await self.session.refresh(user_role)
+        return user_role
+    
+    async def update_user_role(
+        self, user_role: UserRole, role_id: UUID, updated_by: UUID
+    ) -> UserRole:
+        """Update an existing user role assignment (change role_id)."""
+        user_role.role_id = role_id
+        user_role.updated_by = updated_by
+        user_role.is_del = False
+        user_role.deleted_at = None
+        user_role.deleted_by = None
         await self.session.commit()
         await self.session.refresh(user_role)
         return user_role

@@ -9,7 +9,9 @@ from src.schemas import StandardResponse
 from src.users.schemas import (
     UserProfileRead,
     UserProfileUpdate,
-    PasswordChangeRequest,
+    UserMeRead,
+    UserListQuery,
+    UserPaginatedResponse,
 )
 from src.users.dependencies import (
     get_user_api,
@@ -21,11 +23,12 @@ from src.auth.utils import decode_token
 from src.auth.exceptions import InvalidToken
 from src.exceptions import ForbiddenError
 from src.users.models import User
+from src.families.dependencies import get_current_superadmin
 
 
 router = APIRouter(
     prefix="/users",
-    tags=["Profile Management"],
+    tags=["Users"],
 )
 
 
@@ -93,6 +96,78 @@ async def verify_profile_access(
         message="Insufficient permissions. You can only access your own profile.",
         error_code="INSUFFICIENT_PERMISSIONS",
         details=[{"field": "user_id", "issue": "You cannot access this user's profile"}],
+    )
+
+
+@router.get(
+    "",
+    response_model=StandardResponse[UserPaginatedResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List all users",
+    description=(
+        "Retrieves a paginated list of all users in the system. "
+        "This endpoint requires SuperAdmin access. "
+        "Supports pagination, filtering by status, and sorting."
+    ),
+)
+async def list_all_users(
+    query: UserListQuery = Depends(UserListQuery),
+    current_user: User = Depends(get_current_superadmin),
+    api: UserApiDep = Depends(get_user_api),
+) -> StandardResponse[UserPaginatedResponse]:
+    """List all users (SuperAdmin only)."""
+    result = await api.list_all_users(query)
+    return StandardResponse(
+        data=result,
+        message="Users retrieved successfully",
+    )
+
+
+@router.get(
+    "/me",
+    response_model=StandardResponse[UserMeRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get current authenticated user's details with full related objects",
+    description=(
+        "Retrieves current authenticated user's details including full family and role objects. "
+        "This endpoint automatically uses the authenticated user's ID from the JWT token. "
+        "Returns user details with complete Family and Role objects (not just IDs). "
+        "If user is SoftDeleted mid-session, returns 401 and forces logout. "
+        "If family is SoftDeleted mid-session, returns 401 and forces logout. "
+        "Supports ETag for conditional requests via If-None-Match header."
+    ),
+)
+async def get_current_user_me(
+    current_user: User = Depends(get_current_user),
+    api: UserApiDep = Depends(get_user_api),
+    if_none_match: str | None = Header(None, alias="If-None-Match"),
+    response: Response = None,
+) -> StandardResponse[UserMeRead] | FastAPIResponse:
+    """Get current authenticated user's details with full family and role objects."""
+    # Log the current user for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"get_current_user_me: Called with current_user.id={current_user.id}, "
+        f"current_user.email={current_user.email}"
+    )
+    
+    # Pass If-None-Match to service (service handles all ETag logic)
+    service_response = await api.get_current_user_me(
+        current_user.id, if_none_match=if_none_match
+    )
+    
+    # Router only sets headers and returns response (no business logic, no conditionals)
+    for key, value in service_response.headers.items():
+        response.headers[key] = value
+    
+    # Router mechanically returns response based on service response_type (no business logic)
+    if service_response.response_type == "fastapi":
+        return service_response.to_fastapi_response()
+    
+    return StandardResponse(
+        data=service_response.data,
+        message="User details retrieved successfully",
     )
 
 

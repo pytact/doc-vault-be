@@ -116,34 +116,72 @@ class RoleService:
                 raise InvalidRoleId(str(role_id))
             roles.append(role)
         
-        # Get existing user roles for this family
-        existing_user_roles = await self.repository.get_user_roles_by_user_and_family(user_id, family_id)
+        # Get ALL user roles for this family (including soft-deleted) to handle all cases
+        all_existing_roles = await self.repository.get_all_user_roles_by_user_and_family(user_id, family_id)
         
-        # Soft delete all existing user roles for this family
-        for existing_user_role in existing_user_roles:
-            await self.repository.delete_user_role(existing_user_role, current_user_id)
+        # Filter to get active roles
+        active_roles = [r for r in all_existing_roles if not r.is_del and r.deleted_at is None]
         
-        # Create new user role assignments (single role per user)
-        new_user_roles = []
-        for role in roles:
-            user_role = UserRole(
-                user_id=user_id,
-                family_id=family_id,
-                role_id=role.id,
-                created_by=current_user_id,
-                is_del=False,
-            )
-            new_user_role = await self.repository.create_user_role(user_role)
-            new_user_roles.append(new_user_role)
-        
-        # Build response with role summaries
-        role_summaries = [
-            UserRoleSummary(
-                id=role.id,
-                name=role.name,
-            )
-            for role in roles
-        ]
+        # If no roles provided, soft delete all existing active roles
+        if not roles:
+            for active_role in active_roles:
+                await self.repository.delete_user_role(active_role, current_user_id)
+            role_summaries = []
+        else:
+            # We should only have one role (validated above)
+            new_role = roles[0]
+            
+            if active_roles:
+                # Update the first active role
+                existing_role = active_roles[0]
+                updated_role = await self.repository.update_user_role(
+                    existing_role, new_role.id, current_user_id
+                )
+                
+                # Soft delete any additional active roles
+                for extra_role in active_roles[1:]:
+                    await self.repository.delete_user_role(extra_role, current_user_id)
+                
+                role_summaries = [
+                    UserRoleSummary(
+                        id=new_role.id,
+                        name=new_role.name,
+                    )
+                ]
+            elif all_existing_roles:
+                # We have soft-deleted roles, reactivate and update the first one
+                existing_role = all_existing_roles[0]
+                updated_role = await self.repository.update_user_role(
+                    existing_role, new_role.id, current_user_id
+                )
+                
+                # Soft delete any other roles (active or deleted)
+                for extra_role in all_existing_roles[1:]:
+                    if not extra_role.is_del:
+                        await self.repository.delete_user_role(extra_role, current_user_id)
+                
+                role_summaries = [
+                    UserRoleSummary(
+                        id=new_role.id,
+                        name=new_role.name,
+                    )
+                ]
+            else:
+                # No existing role at all, create new one
+                user_role = UserRole(
+                    user_id=user_id,
+                    family_id=family_id,
+                    role_id=new_role.id,
+                    created_by=current_user_id,
+                    is_del=False,
+                )
+                await self.repository.create_user_role(user_role)
+                role_summaries = [
+                    UserRoleSummary(
+                        id=new_role.id,
+                        name=new_role.name,
+                    )
+                ]
         
         return UserRoleUpdateResponse(
             user_id=user_id,

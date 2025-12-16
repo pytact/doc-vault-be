@@ -173,13 +173,22 @@ class UserRole(Base):
     
     # Table-level constraints
     __table_args__ = (
-        # UNIQUE constraint on user_id WHERE deleted_at IS NULL (one-to-one relationship)
-        # Partial unique index ensures each user has exactly one active role
+        # UNIQUE constraint for family roles: (user_id, family_id) WHERE deleted_at IS NULL AND family_id IS NOT NULL
+        # Ensures each user has exactly one active role per family
         Index(
-            "uq_user_roles_user_active",
+            "uq_user_roles_user_family_active",
+            "user_id",
+            "family_id",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND family_id IS NOT NULL"),
+        ),
+        # UNIQUE constraint for superadmin: user_id WHERE deleted_at IS NULL AND family_id IS NULL
+        # Ensures each user has exactly one active superadmin role (global, no family)
+        Index(
+            "uq_user_roles_superadmin_active",
             "user_id",
             unique=True,
-            postgresql_where=text("deleted_at IS NULL"),
+            postgresql_where=text("deleted_at IS NULL AND family_id IS NULL"),
         ),
         # CHECK constraint: SuperAdmin has NULL family_id, other roles have non-NULL family_id
         # Note: This requires joining with roles table, which is complex in CHECK constraint

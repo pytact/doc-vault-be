@@ -3,7 +3,7 @@ from uuid import uuid4, UUID
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, func, Text, Index, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from src.database import Base
 
@@ -77,6 +77,13 @@ class Category(Base):
         nullable=False,
         default=False,
         index=True,
+    )
+    
+        # Relationships
+    subcategories: Mapped[list["Subcategory"]] = relationship(
+        "Subcategory",
+        back_populates="category",
+        lazy="selectin",  # Default eager loading strategy
     )
     
     # Table-level constraints
@@ -169,6 +176,12 @@ class Subcategory(Base):
         nullable=False,
         default=False,
         index=True,
+    )
+    
+    # Relationships
+    category: Mapped["Category"] = relationship(
+        "Category",
+        back_populates="subcategories",
     )
     
     # Table-level constraints

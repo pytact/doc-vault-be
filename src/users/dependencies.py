@@ -64,6 +64,10 @@ class UserApiDep:
         """List users within a family."""
         return await self.service.list_users(family_id, query)
     
+    async def list_all_users(self, query):
+        """List all users."""
+        return await self.service.list_all_users(query)
+    
     async def get_user_by_id(
         self,
         family_id: UUID,
@@ -130,6 +134,14 @@ class UserApiDep:
         """Get current user profile with ETag support."""
         return await self.service.get_current_user_profile(user_id, if_none_match=if_none_match)
     
+    async def get_current_user_me(
+        self,
+        user_id: UUID,
+        if_none_match: Optional[str] = None,
+    ):
+        """Get current user details with full family and role objects."""
+        return await self.service.get_current_user_me(user_id, if_none_match=if_none_match)
+    
     async def update_current_user_profile(
         self,
         user_id: UUID,
@@ -138,14 +150,6 @@ class UserApiDep:
     ):
         """Update current user profile with ETag validation."""
         return await self.service.update_current_user_profile(user_id, data, if_match=if_match)
-    
-    async def change_password(
-        self,
-        user_id: UUID,
-        data,
-    ):
-        """Change current user password."""
-        return await self.service.change_password(user_id, data)
     
     async def resend_invitation(
         self,
