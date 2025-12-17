@@ -207,12 +207,8 @@ async def verify_resend_authorization(
     "/resend",
     response_model=StandardResponse[InvitationResendResponse],
     status_code=status.HTTP_200_OK,
-    summary="Resend invitation email",
-    description=(
-        "Resend invitation email to a user with PendingActivation status. "
-        "SuperAdmin can resend invitation for any user. FamilyAdmin can only resend invitation "
-        "for users in their own family. Generates new invitation token and sets new expiration (24 hours)."
-    ),
+    summary=UserApiDocs.resend_invitation["summary"],
+    description=UserApiDocs.resend_invitation["description"],
 )
 async def resend_invitation(
     data: InvitationResendRequest,

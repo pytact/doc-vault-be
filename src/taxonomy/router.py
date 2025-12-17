@@ -32,15 +32,20 @@ async def get_taxonomy(
     api: TaxonomyApiDep = Depends(get_taxonomy_api),
     if_none_match: str | None = Header(None, alias="If-None-Match"),
     response: Response = None,
-) -> StandardResponse[TaxonomyData]:
+) -> StandardResponse[TaxonomyData] | FastAPIResponse:
     """Get complete taxonomy including all categories and subcategories."""
     # Delegate to service - business logic in service.py
-    result = await api.get_taxonomy()
+    service_response = await api.get_taxonomy(if_none_match=if_none_match)
     
-    # TODO: ETag support can be added later if needed for cache validation
-    # For now, taxonomy is immutable so ETag is optional
+    # Set headers from service response (HTTP concern - header setting)
+    for key, value in service_response.headers.items():
+        response.headers[key] = value
+    
+    # Router mechanically returns response based on service response_type (no business logic)
+    if service_response.response_type == "fastapi":
+        return service_response.to_fastapi_response()
     
     return StandardResponse(
-        data=result,
+        data=service_response.data,
         message="Taxonomy retrieved successfully",
     )

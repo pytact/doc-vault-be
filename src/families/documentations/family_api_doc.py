@@ -6,7 +6,7 @@ class FamilyApiDocs:
     """API documentation for Family endpoints."""
     
     list: ClassVar[dict] = {
-        "summary": "List all families with pagination, filtering, and sorting (SuperAdmin only)",
+        "summary": "Purpose of this API is to list all families with pagination, filtering, and sorting (SuperAdmin only)",
         "description": (
             "Retrieves a paginated list of all families. Only SuperAdmin can access this endpoint. "
             "Supports filtering by status (Active, SoftDeleted), sorting by name, created_at, or status, "
@@ -15,7 +15,7 @@ class FamilyApiDocs:
     }
     
     create: ClassVar[dict] = {
-        "summary": "Create a new family (SuperAdmin only)",
+        "summary": "Purpose of this API is to create a new family (SuperAdmin only)",
         "description": (
             "Creates a new family with the specified name. Only SuperAdmin can create families. "
             "Family name must be unique system-wide (case-insensitive). Family is created with "
@@ -24,7 +24,7 @@ class FamilyApiDocs:
     }
     
     get: ClassVar[dict] = {
-        "summary": "Get family details",
+        "summary": "Purpose of this API is to get family details",
         "description": (
             "Retrieves details of a specific family. SuperAdmin can access any family. "
             "FamilyAdmin and Member can only access their own family (family_id from token must match). "
@@ -33,7 +33,7 @@ class FamilyApiDocs:
     }
     
     update: ClassVar[dict] = {
-        "summary": "Update family name (SuperAdmin only)",
+        "summary": "Purpose of this API is to update family name (SuperAdmin only)",
         "description": (
             "Updates the name of a family. Only SuperAdmin can update families. "
             "Family name must be unique system-wide (case-insensitive). "
@@ -42,7 +42,7 @@ class FamilyApiDocs:
     }
     
     soft_delete: ClassVar[dict] = {
-        "summary": "Soft delete family with cascade to users and documents (SuperAdmin only)",
+        "summary": "Purpose of this API is to soft delete family with cascade to users and documents (SuperAdmin only)",
         "description": (
             "Soft deletes a family, which cascades to all users in the family and all documents. "
             "Only SuperAdmin can soft-delete families. Soft-delete cascades to: all users in the family "

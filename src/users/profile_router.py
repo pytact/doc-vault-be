@@ -103,12 +103,8 @@ async def verify_profile_access(
     "",
     response_model=StandardResponse[UserPaginatedResponse],
     status_code=status.HTTP_200_OK,
-    summary="List all users",
-    description=(
-        "Retrieves a paginated list of all users in the system. "
-        "This endpoint requires SuperAdmin access. "
-        "Supports pagination, filtering by status, and sorting."
-    ),
+    summary=UserApiDocs.list_all["summary"],
+    description=UserApiDocs.list_all["description"],
 )
 async def list_all_users(
     query: UserListQuery = Depends(UserListQuery),
@@ -127,15 +123,8 @@ async def list_all_users(
     "/me",
     response_model=StandardResponse[UserMeRead],
     status_code=status.HTTP_200_OK,
-    summary="Get current authenticated user's details with full related objects",
-    description=(
-        "Retrieves current authenticated user's details including full family and role objects. "
-        "This endpoint automatically uses the authenticated user's ID from the JWT token. "
-        "Returns user details with complete Family and Role objects (not just IDs). "
-        "If user is SoftDeleted mid-session, returns 401 and forces logout. "
-        "If family is SoftDeleted mid-session, returns 401 and forces logout. "
-        "Supports ETag for conditional requests via If-None-Match header."
-    ),
+    summary=UserApiDocs.get_me["summary"],
+    description=UserApiDocs.get_me["description"],
 )
 async def get_current_user_me(
     current_user: User = Depends(get_current_user),

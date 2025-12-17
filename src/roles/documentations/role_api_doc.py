@@ -6,7 +6,7 @@ class RoleApiDocs:
     """API documentation for Role endpoints."""
     
     list: ClassVar[dict] = {
-        "summary": "List all available predefined roles (global)",
+        "summary": "Purpose of this API is to list all available predefined roles (global)",
         "description": (
             "Retrieves all available predefined roles (global, not family-scoped). Roles are: superadmin, familyadmin, member. "
             "Roles are predefined and not editable via API. Permissions are JSON objects imported from permission system. "
@@ -15,7 +15,7 @@ class RoleApiDocs:
     }
     
     update_user_roles: ClassVar[dict] = {
-        "summary": "Update user roles within a family (replace existing roles)",
+        "summary": "Purpose of this API is to update user roles within a family (replace existing roles)",
         "description": (
             "Updates user roles within a family (replaces existing roles). SuperAdmin can update roles for users in any family. "
             "FamilyAdmin can update roles for users in their own family (family_id from token must match). Member role cannot "

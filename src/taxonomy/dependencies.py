@@ -13,9 +13,9 @@ class TaxonomyApiDep:
         self.service = TaxonomyService(session)
         self.session = session
     
-    async def get_taxonomy(self):
-        """Get complete taxonomy."""
-        return await self.service.get_taxonomy()
+    async def get_taxonomy(self, if_none_match: str | None = None):
+        """Get complete taxonomy with ETag support."""
+        return await self.service.get_taxonomy(if_none_match=if_none_match)
 
 
 def get_taxonomy_api(session: AsyncSession = Depends(get_session)) -> TaxonomyApiDep:

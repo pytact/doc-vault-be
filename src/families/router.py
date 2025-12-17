@@ -122,14 +122,14 @@ async def update_family(
 ) -> StandardResponse[FamilyRead]:
     """Update family name."""
     # Pass If-Match to service (service handles all ETag validation)
-    family_read = await api.update_family(family_id, data, current_user.id, if_match=if_match)
+    service_response = await api.update_family(family_id, data, current_user.id, if_match=if_match)
     
-    # Router only sets headers from service result (no business logic)
-    if hasattr(family_read, '_etag'):
-        response.headers["ETag"] = family_read._etag
+    # Set headers from service response (HTTP concern - header setting)
+    for key, value in service_response.headers.items():
+        response.headers[key] = value
     
     return StandardResponse(
-        data=family_read,
+        data=service_response.data,
         message="Family updated successfully",
     )
 
@@ -150,13 +150,13 @@ async def soft_delete_family(
 ) -> StandardResponse[FamilyRead]:
     """Soft delete family."""
     # Pass If-Match to service (service handles all ETag validation)
-    family_read = await api.soft_delete_family(family_id, current_user.id, if_match=if_match)
+    service_response = await api.soft_delete_family(family_id, current_user.id, if_match=if_match)
     
-    # Router only sets headers from service result (no business logic)
-    if hasattr(family_read, '_etag'):
-        response.headers["ETag"] = family_read._etag
+    # Set headers from service response (HTTP concern - header setting)
+    for key, value in service_response.headers.items():
+        response.headers[key] = value
     
     return StandardResponse(
-        data=family_read,
+        data=service_response.data,
         message="Family soft-deleted successfully",
     )

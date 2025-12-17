@@ -6,7 +6,7 @@ class AuthApiDocs:
     """API documentation for Authentication endpoints."""
     
     login: ClassVar[dict] = {
-        "summary": "Authenticate user with email and password, return JWT token",
+        "summary": "Purpose of this API is to authenticate user with email and password and return JWT token",
         "description": (
             "Authenticates a user with email and password. Returns a JWT access token "
             "with user information including role and family details. "
@@ -16,7 +16,7 @@ class AuthApiDocs:
     }
     
     logout: ClassVar[dict] = {
-        "summary": "Logout user and invalidate session",
+        "summary": "Purpose of this API is to logout user and invalidate session",
         "description": (
             "Logs out the current user. Token invalidation is handled server-side "
             "if token blacklist is implemented. This endpoint always succeeds, "
@@ -25,7 +25,7 @@ class AuthApiDocs:
     }
     
     token: ClassVar[dict] = {
-        "summary": "OAuth2-compatible token endpoint for Swagger UI authorization",
+        "summary": "Purpose of this API is to provide OAuth2-compatible token endpoint for Swagger UI authorization",
         "description": (
             "OAuth2-compatible token endpoint that accepts form data (username/password) "
             "and returns an access token. This endpoint is used by Swagger UI for "

@@ -6,7 +6,7 @@ class UserApiDocs:
     """API documentation for User endpoints."""
     
     list: ClassVar[dict] = {
-        "summary": "List users within a family with pagination, filtering, and sorting",
+        "summary": "Purpose of this API is to list users within a family with pagination, filtering, and sorting",
         "description": (
             "Retrieves a paginated list of users within a family. SuperAdmin can list users in any family. "
             "FamilyAdmin can only list users in their own family (family_id from token must match). "
@@ -17,7 +17,7 @@ class UserApiDocs:
     }
     
     get: ClassVar[dict] = {
-        "summary": "Get user details within a family",
+        "summary": "Purpose of this API is to get user details within a family",
         "description": (
             "Retrieves details of a specific user within a family. SuperAdmin can access users in any family. "
             "FamilyAdmin can only access users in their own family (family_id from token must match). "
@@ -28,7 +28,7 @@ class UserApiDocs:
     }
     
     soft_delete: ClassVar[dict] = {
-        "summary": "Soft delete user with cascade to documents (SuperAdmin or FamilyAdmin)",
+        "summary": "Purpose of this API is to soft delete user with cascade to documents (SuperAdmin or FamilyAdmin)",
         "description": (
             "Soft deletes a user, which cascades to all user-owned documents and User_Role mappings. "
             "SuperAdmin can soft-delete users in any family. FamilyAdmin can soft-delete users in their own "
@@ -41,7 +41,7 @@ class UserApiDocs:
     }
     
     create_invitation: ClassVar[dict] = {
-        "summary": "Create user invitation and send invitation email",
+        "summary": "Purpose of this API is to create user invitation and send invitation email",
         "description": (
             "Creates a new user invitation and sends invitation email. SuperAdmin can invite users to any family. "
             "FamilyAdmin can only invite users to their own family (family_id from token must match). "
@@ -53,7 +53,7 @@ class UserApiDocs:
     }
     
     validate_invitation: ClassVar[dict] = {
-        "summary": "Validate invitation token and determine if account setup can proceed",
+        "summary": "Purpose of this API is to validate invitation token and determine if account setup can proceed",
         "description": (
             "Validates invitation token and determines if account setup can proceed. This is a public endpoint "
             "(no authentication required). Token is valid if: user exists with matching invite_token, user status "
@@ -64,7 +64,7 @@ class UserApiDocs:
     }
     
     activate_invitation: ClassVar[dict] = {
-        "summary": "Activate user account by setting name and password",
+        "summary": "Purpose of this API is to activate user account by setting name and password",
         "description": (
             "Activates user account by setting name and password. This is a public endpoint (no authentication required, "
             "uses invitation token). Token must be valid and not expired (same validation as GET /v1/invitations/validate). "
@@ -78,7 +78,7 @@ class UserApiDocs:
     }
     
     get_profile: ClassVar[dict] = {
-        "summary": "Get user profile by user ID",
+        "summary": "Purpose of this API is to get user profile by user ID",
         "description": (
             "Retrieves user profile information by user_id. Users can access their own profile (user_id matches JWT sub). "
             "SuperAdmin can access any user's profile. FamilyAdmin can access users in their own family only. "
@@ -90,7 +90,7 @@ class UserApiDocs:
     }
     
     update_profile: ClassVar[dict] = {
-        "summary": "Update current authenticated user's profile (name and/or password)",
+        "summary": "Purpose of this API is to update current authenticated user's profile (name and/or password)",
         "description": (
             "Updates current authenticated user's profile. All authenticated users can update their own profile. "
             "SuperAdmin can update any user's profile. FamilyAdmin can update users in their own family only. "
@@ -101,5 +101,35 @@ class UserApiDocs:
             "(cannot update if PendingActivation or SoftDeleted). If user is SoftDeleted mid-session, returns 401 and forces logout. "
             "If family is SoftDeleted mid-session, returns 401 and forces logout. Requires If-Match header for ETag validation "
             "to prevent concurrent modification conflicts."
+        ),
+    }
+    
+    list_all: ClassVar[dict] = {
+        "summary": "Purpose of this API is to list all users in the system (SuperAdmin only)",
+        "description": (
+            "Retrieves a paginated list of all users in the system. "
+            "This endpoint requires SuperAdmin access. "
+            "Supports pagination, filtering by status, and sorting."
+        ),
+    }
+    
+    get_me: ClassVar[dict] = {
+        "summary": "Purpose of this API is to get current authenticated user's details with full related objects",
+        "description": (
+            "Retrieves current authenticated user's details including full family and role objects. "
+            "This endpoint automatically uses the authenticated user's ID from the JWT token. "
+            "Returns user details with complete Family and Role objects (not just IDs). "
+            "If user is SoftDeleted mid-session, returns 401 and forces logout. "
+            "If family is SoftDeleted mid-session, returns 401 and forces logout. "
+            "Supports ETag for conditional requests via If-None-Match header."
+        ),
+    }
+    
+    resend_invitation: ClassVar[dict] = {
+        "summary": "Purpose of this API is to resend invitation email",
+        "description": (
+            "Resend invitation email to a user with PendingActivation status. "
+            "SuperAdmin can resend invitation for any user. FamilyAdmin can only resend invitation "
+            "for users in their own family. Generates new invitation token and sets new expiration (24 hours)."
         ),
     }

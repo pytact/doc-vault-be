@@ -1,6 +1,9 @@
 """Celery task definitions."""
+import asyncio
 from src.celery_app import celery_app
 from src.infra.email import send_invitation_email, send_email, load_email_template
+from src.database import AsyncSessionLocal
+from src.notification.service import NotificationService
 
 
 @celery_app.task(name="send_welcome_email")
@@ -76,5 +79,43 @@ def send_invitation_email_task(
         )
     except Exception as e:
         print(f"Error sending invitation email: {str(e)}")
+        raise
+
+
+@celery_app.task(name="process_expiry_reminders")
+def process_expiry_reminders_task():
+    """Daily task to process pending reminder schedules and send notifications.
+    
+    Runs daily at 00:00 UTC to:
+    - Query pending ReminderSchedule records where send_at <= NOW()
+    - Create InAppNotification records
+    - Send email notifications
+    - Mark schedules as sent
+    
+    Returns:
+        dict: Processing statistics
+    """
+    async def _process_reminders():
+        """Async helper to process reminders with database session."""
+        async with AsyncSessionLocal() as session:
+            notification_service = NotificationService(session)
+            stats = await notification_service.process_pending_reminders()
+            return stats
+    
+    try:
+        # Run async function in Celery task
+        stats = asyncio.run(_process_reminders())
+        
+        # Log statistics
+        print(f"Expiry reminders processed: {stats}")
+        print(f"  - Processed: {stats.get('processed', 0)}")
+        print(f"  - Notifications created: {stats.get('created_notifications', 0)}")
+        print(f"  - Emails sent: {stats.get('sent_emails', 0)}")
+        print(f"  - Errors: {stats.get('errors', 0)}")
+        print(f"  - Skipped: {stats.get('skipped', 0)}")
+        
+        return stats
+    except Exception as e:
+        print(f"Error processing expiry reminders: {str(e)}")
         raise
 

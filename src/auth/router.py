@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session
 from src.schemas import StandardResponse
-from src.auth.schemas import LoginRequest, LoginResponse
+from src.auth.schemas import LoginRequest, LoginResponse, TokenRequest
 from src.auth.dependencies import AuthApiDep, get_current_user, get_auth_api
 from src.auth.documentations.auth_api_doc import AuthApiDocs
 from src.auth.exceptions import (
@@ -13,6 +13,14 @@ from src.auth.exceptions import (
     FamilySoftDeleted,
 )
 from src.users.models import User
+
+
+async def get_token_request(
+    username: str = Form(..., description="Username (email address) for OAuth2 compatibility"),
+    password: str = Form(..., description="User password"),
+) -> TokenRequest:
+    """Dependency to convert Form fields to TokenRequest schema."""
+    return TokenRequest(username=username, password=password)
 
 
 router = APIRouter(
@@ -66,14 +74,13 @@ async def logout(
     description=AuthApiDocs.token["description"],
 )
 async def token(
-    username: str = Form(...),  # OAuth2 uses 'username' but we treat it as email
-    password: str = Form(...),
+    data: TokenRequest = Depends(get_token_request),
     api: AuthApiDep = Depends(get_auth_api),
 ):
     """OAuth2-compatible token endpoint for Swagger UI authorization."""
     try:
         # Service handles all business logic (authentication, error handling)
-        result = await api.login(username, password)  # username is actually email
+        result = await api.login(data.username, data.password)  # username is actually email
         # Router only formats response (no business logic)
         return {
             "access_token": result.token,

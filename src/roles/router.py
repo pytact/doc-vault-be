@@ -68,15 +68,16 @@ async def update_user_roles(
     )
     
     # Pass If-Match to service (service handles ETag validation)
-    result = await api.update_user_roles(
+    service_response = await api.update_user_roles(
         family_id, user_id, data, current_user.id, current_user_is_superadmin,
         if_match=if_match
     )
     
-    # Router only sets headers from service result (no business logic)
-    # Note: Service doesn't attach ETag for this endpoint per spec, but we can set it if needed
+    # Set headers from service response (HTTP concern - header setting)
+    for key, value in service_response.headers.items():
+        response.headers[key] = value
     
     return StandardResponse(
-        data=result,
+        data=service_response.data,
         message="User roles updated successfully",
     )

@@ -36,3 +36,11 @@ class LoginResponse(BaseModel):
 class LogoutResponse(BaseModel):
     """Logout response schema (no data)."""
     pass
+
+
+class TokenRequest(BaseModel):
+    """OAuth2-compatible token request schema (uses Form fields)."""
+    username: str = Field(..., description="Username (email address) for OAuth2 compatibility")
+    password: str = Field(..., description="User password")
+    
+    model_config = ConfigDict(from_attributes=True)

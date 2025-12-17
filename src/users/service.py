@@ -543,15 +543,54 @@ class UserService:
         
         user = await self.repository.create(new_user)
         
-        # Create UserRole with default "member" role
-        member_role = await self.role_repository.get_by_name("member")
-        if not member_role:
-            raise ValueError("Default 'member' role not found in database")
+        # Determine role_id: use provided role_id or default to "member"
+        role_id_to_use: UUID
+        if data.role_id:
+            # Validate that the provided role exists
+            provided_role = await self.role_repository.get_by_id(data.role_id)
+            if not provided_role:
+                from src.exceptions import ValidationError
+                raise ValidationError(
+                    message=f"Role with ID {data.role_id} not found",
+                    error_code="VALIDATION_ERROR",
+                    details=[{"field": "role_id", "issue": f"Role ID {data.role_id} does not exist"}],
+                )
+            
+            # Validate business rules for role assignment
+            role_name = provided_role.name.lower()
+            
+            # SuperAdmin cannot be assigned to a family (must have family_id = NULL)
+            # Since current implementation requires family_id, SuperAdmin creation is not supported
+            if role_name == "superadmin":
+                from src.exceptions import ValidationError
+                raise ValidationError(
+                    message="SuperAdmin role cannot be assigned to a family. SuperAdmin user creation without family_id is not yet supported.",
+                    error_code="VALIDATION_ERROR",
+                    details=[{"field": "role_id", "issue": "SuperAdmin role requires family_id to be null, which is not yet supported"}],
+                )
+            
+            # FamilyAdmin and Member are valid for family assignments
+            if role_name not in ["familyadmin", "member"]:
+                from src.exceptions import ValidationError
+                raise ValidationError(
+                    message=f"Invalid role '{role_name}' for family assignment. Only 'familyadmin' and 'member' roles are allowed.",
+                    error_code="VALIDATION_ERROR",
+                    details=[{"field": "role_id", "issue": f"Role '{role_name}' is not valid for family assignments"}],
+                )
+            
+            role_id_to_use = data.role_id
+        else:
+            # Default to "member" role if role_id not provided
+            member_role = await self.role_repository.get_by_name("member")
+            if not member_role:
+                raise ValueError("Default 'member' role not found in database")
+            role_id_to_use = member_role.id
         
+        # Create UserRole with determined role_id
         user_role = UserRole(
             user_id=user.id,
             family_id=family_id,
-            role_id=member_role.id,
+            role_id=role_id_to_use,
             created_by=current_user_id,
             is_del=False,
         )

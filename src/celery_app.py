@@ -1,5 +1,6 @@
 """Celery application configuration."""
 from celery import Celery
+from celery.schedules import crontab
 from src.config import settings
 
 celery_app = Celery(
@@ -17,6 +18,13 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=30 * 60,  # 30 minutes
     task_soft_time_limit=25 * 60,  # 25 minutes
+    # Celery Beat schedule for periodic tasks
+    beat_schedule={
+        "process-expiry-reminders": {
+            "task": "process_expiry_reminders",
+            "schedule": crontab(hour=0, minute=0),  # Daily at 00:00 UTC
+        },
+    },
 )
 
 # Import tasks to register them with Celery

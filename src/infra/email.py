@@ -75,7 +75,7 @@ def send_invitation_email(
         bool: True if email sent successfully, False otherwise
     """
     # Build activation URL
-    activation_url = f"{settings.frontend_url}/invitations/activate/{invitation_token}"
+    activation_url = f"{settings.frontend_url}/invite/{invitation_token}/validate"
     
     # Load template
     template = load_email_template("invitation.html")

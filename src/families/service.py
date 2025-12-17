@@ -177,7 +177,7 @@ class FamilyService:
         data: FamilyUpdate,
         current_user_id: UUID,
         if_match: Optional[str] = None,
-    ) -> FamilyRead:
+    ) -> ServiceResponse[FamilyRead]:
         """Update family name with ETag validation (business logic in service)."""
         # Get current resource for ETag validation
         current_family = await self.repository.get_by_id(family_id)
@@ -214,14 +214,24 @@ class FamilyService:
         # updated_at is set automatically by onupdate=func.now()
         
         family = await self.repository.update(current_family)
-        return self._family_to_read_schema(family)
+        family_read = self._family_to_read_schema(family)
+        
+        # Return ServiceResponse with ETag headers (business logic in service)
+        return ServiceResponse(
+            data=family_read,
+            status_code=status.HTTP_200_OK,
+            headers={
+                "ETag": family_read._etag,
+                "Last-Modified": family_read._last_modified,
+            },
+        )
     
     async def soft_delete_family(
         self,
         family_id: UUID,
         current_user_id: UUID,
         if_match: Optional[str] = None,
-    ) -> FamilyRead:
+    ) -> ServiceResponse[FamilyRead]:
         """Soft delete family with cascade to users and ETag validation (business logic in service)."""
         # Get current resource for ETag validation
         current_family = await self.repository.get_by_id(family_id)
@@ -260,4 +270,14 @@ class FamilyService:
         # For now, we just soft-delete the family
         
         family = await self.repository.soft_delete(current_family)
-        return self._family_to_read_schema(family)
+        family_read = self._family_to_read_schema(family)
+        
+        # Return ServiceResponse with ETag headers (business logic in service)
+        return ServiceResponse(
+            data=family_read,
+            status_code=status.HTTP_200_OK,
+            headers={
+                "ETag": family_read._etag,
+                "Last-Modified": family_read._last_modified,
+            },
+        )

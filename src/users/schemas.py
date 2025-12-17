@@ -45,7 +45,7 @@ class UserListRead(BaseModel):
     family_status: str  # Family status (Active, SoftDeleted)
     created_at: datetime
     created_by: Optional[UUID] = None
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     updated_by: Optional[UUID] = None
     deleted_at: Optional[datetime] = None
     deleted_by: Optional[UUID] = None
@@ -69,7 +69,7 @@ class UserDetailRead(BaseModel):
     allowed_role_management: bool  # True if current user can manage roles
     created_at: datetime
     created_by: Optional[UUID] = None
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     updated_by: Optional[UUID] = None
     deleted_at: Optional[datetime] = None
     deleted_by: Optional[UUID] = None
@@ -203,7 +203,7 @@ class UserMeRead(BaseModel):
     password_rules: "PasswordRules"
     created_at: datetime
     created_by: Optional[UUID] = None
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     updated_by: Optional[UUID] = None
     deleted_at: Optional[datetime] = None
     deleted_by: Optional[UUID] = None
@@ -223,7 +223,7 @@ class UserProfileRead(BaseModel):
     password_rules: PasswordRules
     created_at: datetime
     created_by: Optional[UUID] = None
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     updated_by: Optional[UUID] = None
     deleted_at: Optional[datetime] = None
     deleted_by: Optional[UUID] = None

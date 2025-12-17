@@ -3,6 +3,7 @@ from uuid import UUID
 from typing import Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import status
 from src.roles.repository import RoleRepository
 from src.users.repository import UserRepository
 from src.families.repository import FamilyRepository
@@ -23,6 +24,8 @@ from src.users.models import User
 from src.families.models import Family
 from src.users.exceptions import UserNotFound, FamilySoftDeletedForUsers
 from src.families.exceptions import FamilyNotFound
+from src.response import ServiceResponse
+from src.utils import generate_etag, format_last_modified
 
 
 class RoleService:
@@ -59,7 +62,7 @@ class RoleService:
         current_user_id: UUID,
         current_user_is_superadmin: bool,
         if_match: Optional[str] = None,
-    ) -> UserRoleUpdateResponse:
+    ) -> ServiceResponse[UserRoleUpdateResponse]:
         """Update user roles within a family (replace existing roles) with ETag validation (business logic in service)."""
         # Verify family exists and is not soft-deleted
         family = await self.family_repository.get_by_id(family_id)
@@ -183,8 +186,28 @@ class RoleService:
                     )
                 ]
         
-        return UserRoleUpdateResponse(
+        # After update, fetch the updated user to get new updated_at for ETag
+        updated_user = await self.user_repository.get_by_id(user_id)
+        if not updated_user:
+            raise UserNotFound(str(user_id))
+        
+        # Generate new ETag from updated user's updated_at (business logic in service)
+        new_etag = generate_etag(updated_user.updated_at)
+        last_modified = format_last_modified(updated_user.updated_at)
+        
+        # Build response
+        response_data = UserRoleUpdateResponse(
             user_id=user_id,
             family_id=family_id,
             roles=role_summaries,
+        )
+        
+        # Return ServiceResponse with ETag headers (business logic in service)
+        return ServiceResponse(
+            data=response_data,
+            status_code=status.HTTP_200_OK,
+            headers={
+                "ETag": f'"{new_etag}"',
+                "Last-Modified": last_modified,
+            },
         )

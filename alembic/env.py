@@ -12,6 +12,7 @@ from src.documents.models import Document, DocumentAssign
 from src.families.models import Family
 from src.roles.models import Role, UserRole
 from src.taxonomy.models import Category, Subcategory
+from src.notification.models import ReminderSchedule, InAppNotification
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # this is the Alembic Config object, which provides
