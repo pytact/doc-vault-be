@@ -44,3 +44,32 @@ class TokenRequest(BaseModel):
     password: str = Field(..., description="User password")
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class PasswordResetRequest(BaseModel):
+    """Password reset request schema."""
+    email: EmailStr = Field(..., description="User email address")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PasswordResetRequestResponse(BaseModel):
+    """Password reset request response schema."""
+    message: str = Field(..., description="Success message")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PasswordResetConfirm(BaseModel):
+    """Password reset confirmation schema."""
+    reset_token: str = Field(..., description="Password reset token from email")
+    password: str = Field(..., min_length=12, description="New password (minimum 12 characters)")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PasswordResetConfirmResponse(BaseModel):
+    """Password reset confirmation response schema."""
+    message: str = Field(..., description="Success message")
+    
+    model_config = ConfigDict(from_attributes=True)

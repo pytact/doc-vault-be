@@ -1,5 +1,5 @@
 """Authentication exceptions."""
-from src.exceptions import UnauthenticatedError
+from src.exceptions import UnauthenticatedError, ValidationError
 
 
 class InvalidCredentials(UnauthenticatedError):
@@ -65,4 +65,37 @@ class InvalidToken(UnauthenticatedError):
             message="Invalid token. Please login again.",
             error_code="INVALID_TOKEN",
             details=[{"field": "token", "issue": "Invalid token"}],
+        )
+
+
+class ResetTokenInvalid(UnauthenticatedError):
+    """Invalid or expired password reset token."""
+    
+    def __init__(self):
+        super().__init__(
+            message="Password reset token is invalid or has expired. Please request a new one.",
+            error_code="RESET_TOKEN_INVALID",
+            details=[{"field": "reset_token", "issue": "Reset token is invalid or expired"}],
+        )
+
+
+class ResetTokenExpired(UnauthenticatedError):
+    """Password reset token expired."""
+    
+    def __init__(self):
+        super().__init__(
+            message="Password reset token has expired. Please request a new one.",
+            error_code="RESET_TOKEN_EXPIRED",
+            details=[{"field": "reset_token", "issue": "Reset token has expired"}],
+        )
+
+
+class ResetRequestRateLimited(ValidationError):
+    """Too many password reset requests."""
+    
+    def __init__(self):
+        super().__init__(
+            message="Too many password reset requests. Please try again later.",
+            error_code="RATE_LIMIT_EXCEEDED",
+            details=[{"field": "email", "issue": "Too many reset requests. Please wait before requesting again."}],
         )

@@ -126,6 +126,14 @@ class AuthApiDep:
     async def logout(self):
         """Logout user."""
         return await self.service.logout()
+    
+    async def request_password_reset(self, email: str):
+        """Request password reset."""
+        return await self.service.request_password_reset(email)
+    
+    async def confirm_password_reset(self, reset_token: str, new_password: str):
+        """Confirm password reset."""
+        return await self.service.confirm_password_reset(reset_token, new_password)
 
 
 def get_auth_api(session: AsyncSession = Depends(get_session)) -> AuthApiDep:

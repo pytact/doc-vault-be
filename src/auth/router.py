@@ -3,7 +3,15 @@ from fastapi import APIRouter, Depends, status, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session
 from src.schemas import StandardResponse
-from src.auth.schemas import LoginRequest, LoginResponse, TokenRequest
+from src.auth.schemas import (
+    LoginRequest,
+    LoginResponse,
+    TokenRequest,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
+    PasswordResetConfirm,
+    PasswordResetConfirmResponse,
+)
 from src.auth.dependencies import AuthApiDep, get_current_user, get_auth_api
 from src.auth.documentations.auth_api_doc import AuthApiDocs
 from src.auth.exceptions import (
@@ -11,6 +19,8 @@ from src.auth.exceptions import (
     UserNotActivated,
     UserSoftDeleted,
     FamilySoftDeleted,
+    ResetTokenInvalid,
+    ResetTokenExpired,
 )
 from src.users.models import User
 
@@ -92,4 +102,48 @@ async def token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=StandardResponse[PasswordResetRequestResponse],
+    status_code=status.HTTP_200_OK,
+    summary=AuthApiDocs.password_reset_request["summary"],
+    description=AuthApiDocs.password_reset_request["description"],
+)
+async def request_password_reset(
+    data: PasswordResetRequest,
+    api: AuthApiDep = Depends(get_auth_api),
+) -> StandardResponse[PasswordResetRequestResponse]:
+    """Request password reset for a user."""
+    result = await api.request_password_reset(data.email)
+    return StandardResponse(
+        data=result,
+        message=result.message,
+    )
+
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=StandardResponse[PasswordResetConfirmResponse],
+    status_code=status.HTTP_200_OK,
+    summary=AuthApiDocs.password_reset_confirm["summary"],
+    description=AuthApiDocs.password_reset_confirm["description"],
+)
+async def confirm_password_reset(
+    data: PasswordResetConfirm,
+    api: AuthApiDep = Depends(get_auth_api),
+) -> StandardResponse[PasswordResetConfirmResponse]:
+    """Confirm password reset with token and new password."""
+    try:
+        result = await api.confirm_password_reset(data.reset_token, data.password)
+        return StandardResponse(
+            data=result,
+            message=result.message,
+        )
+    except (ResetTokenInvalid, ResetTokenExpired) as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=e.message,
         )

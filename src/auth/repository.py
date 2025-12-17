@@ -59,3 +59,17 @@ class AuthRepository:
             )
         )
         return result.scalar_one_or_none()
+    
+    async def get_user_by_reset_token(
+        self, reset_token: str
+    ) -> Optional[User]:
+        """Get user by reset token (not soft-deleted, active status only)."""
+        result = await self.session.execute(
+            select(User)
+            .where(
+                User.reset_token == reset_token,
+                User.is_del == False,  # Not soft-deleted
+                User.status == "active",  # Only active users
+            )
+        )
+        return result.scalar_one_or_none()

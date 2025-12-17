@@ -28,6 +28,10 @@ class User(Base):
         unique=True,
         index=True,
     )
+    name: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
     hash_password: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -59,6 +63,20 @@ class User(Base):
         index=True,
     )
     activated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    
+    # Password Reset Workflow Fields
+    reset_token: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    reset_token_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    reset_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
