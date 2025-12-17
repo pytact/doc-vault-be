@@ -60,7 +60,4 @@ Thumbs.db
 # Alembic
 alembic.ini.bak
 
-# Modules
-src/notification/
-
 uploads/
