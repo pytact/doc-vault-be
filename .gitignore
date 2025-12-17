@@ -63,7 +63,4 @@ alembic.ini.bak
 # Modules
 src/notification/
 
-# Modules
-src/documents/
-
 uploads/
