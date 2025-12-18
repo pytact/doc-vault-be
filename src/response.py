@@ -1,7 +1,7 @@
 """Response wrapper for service layer to return data with HTTP metadata."""
 from typing import Generic, TypeVar, Optional, Union
 from fastapi import status
-from fastapi.responses import Response as FastAPIResponse
+from fastapi.responses import Response as FastAPIResponse, JSONResponse
 
 T = TypeVar('T')
 
@@ -28,6 +28,18 @@ class ServiceResponse(Generic[T]):
     def to_fastapi_response(self) -> FastAPIResponse:
         """Convert to FastAPI Response for special status codes (e.g., 304)."""
         response = FastAPIResponse(status_code=self.status_code)
+        for key, value in self.headers.items():
+            response.headers[key] = value
+        return response
+
+    def to_standard_response(self, message: str) -> JSONResponse:
+        """Convert to StandardResponse format with headers for normal responses."""
+        from src.schemas import StandardResponse
+
+        response = JSONResponse(
+            status_code=self.status_code,
+            content=StandardResponse(data=self.data, message=message).model_dump()
+        )
         for key, value in self.headers.items():
             response.headers[key] = value
         return response

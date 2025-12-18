@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.response import ServiceResponse
 from src.documents.repository import DocumentRepository, DocumentAssignmentRepository
 from src.documents.models import Document, DocumentAssign
+from src.exceptions import ForbiddenError
 from src.documents.schemas import (
     DocumentCreate,
     DocumentUpdate,
@@ -37,6 +38,7 @@ from src.documents.exceptions import (
     SelfAssignmentBlocked,
     UserNotInFamily,
     AssignmentPermissionDenied,
+    ValidationError,
 )
 from src.documents.constants import (
     MAX_FILE_SIZE_BYTES,
@@ -46,6 +48,8 @@ from src.documents.constants import (
     PERMISSION_VIEWER,
     ACCESS_TYPE_VIEWER,
     ACCESS_TYPE_EDITOR,
+    ERROR_CANNOT_ASSIGN_TO_DELETED_DOCUMENT,
+    ERROR_CODE_VALIDATION_ERROR,
 )
 from src.documents.utils import (
     generate_etag,
@@ -60,6 +64,11 @@ from src.documents.utils import (
 )
 from src.pagination import calculate_total_pages
 from src.users.models import User
+from src.users.repository import UserRepository
+from src.users.exceptions import UserNotFound as UserNotFoundException
+from src.roles.repository import RoleRepository
+from src.notification.service import NotificationService
+from src.notification.repository import NotificationRepository
 from src.auth.utils import decode_token
 
 
@@ -90,7 +99,6 @@ class DocumentService:
         """Validate family access and return family_id (business logic in service)."""
         # SuperAdmin is not allowed to access documents
         if user_role == "superadmin" or family_id is None:
-            from src.exceptions import ForbiddenError
             raise ForbiddenError(
                 message="SuperAdmin is not allowed to access documents. Only FamilyAdmin and Member can access documents.",
                 error_code="INSUFFICIENT_PERMISSIONS",
@@ -206,7 +214,6 @@ class DocumentService:
         
         # Validate family access (business logic)
         if not family_id:
-            from src.exceptions import ForbiddenError
             raise ForbiddenError(
                 message="Family ID is required. Please provide family_id in the request.",
                 error_code="INSUFFICIENT_PERMISSIONS",
@@ -215,7 +222,6 @@ class DocumentService:
         
         # Validate that user belongs to the specified family (business logic)
         if str(family_id) != str(token_family_id):
-            from src.exceptions import ForbiddenError
             raise ForbiddenError(
                 message="You can only create documents in your own family.",
                 error_code="INSUFFICIENT_PERMISSIONS",
@@ -224,7 +230,6 @@ class DocumentService:
         
         # Validate SuperAdmin cannot create documents (business logic)
         if user_role == "superadmin":
-            from src.exceptions import ForbiddenError
             raise ForbiddenError(
                 message="SuperAdmin is not allowed to create documents. Only FamilyAdmin and Member can create documents.",
                 error_code="INSUFFICIENT_PERMISSIONS",
@@ -295,7 +300,6 @@ class DocumentService:
         # Create reminder schedules if expiry_date is set
         if document.expiry_date:
             try:
-                from src.notification.service import NotificationService
                 notification_service = NotificationService(self.session)
                 await notification_service.create_reminder_schedules_for_document(
                     document_id=document.id,
@@ -453,7 +457,6 @@ class DocumentService:
         # Update reminder schedules if expiry_date changed
         if expiry_date_changed:
             try:
-                from src.notification.service import NotificationService
                 notification_service = NotificationService(self.session)
                 
                 if new_expiry_date:
@@ -464,7 +467,6 @@ class DocumentService:
                     )
                 else:
                     # expiry_date was set to None - cancel all pending schedules
-                    from src.notification.repository import NotificationRepository
                     notification_repo = NotificationRepository(self.session)
                     await notification_repo.cancel_pending_schedules_for_document(
                         document.id
@@ -965,11 +967,6 @@ class DocumentService:
         
         # Check document is not soft-deleted (business logic)
         if document.is_del:
-            from src.documents.exceptions import ValidationError
-            from src.documents.constants import (
-                ERROR_CANNOT_ASSIGN_TO_DELETED_DOCUMENT,
-                ERROR_CODE_VALIDATION_ERROR,
-            )
             raise ValidationError(
                 message=ERROR_CANNOT_ASSIGN_TO_DELETED_DOCUMENT,
                 error_code=ERROR_CODE_VALIDATION_ERROR,
@@ -977,8 +974,6 @@ class DocumentService:
             )
         
         # Import UserRepository to check user existence and family membership
-        from src.users.repository import UserRepository
-        from src.users.exceptions import UserNotFound as UserNotFoundException
         user_repository = UserRepository(self.session)
         
         created_assignments = []
@@ -1007,7 +1002,6 @@ class DocumentService:
                 
                 # Check user is in same family (business logic)
                 # Get user's role in the document's family
-                from src.roles.repository import RoleRepository
                 role_repository = RoleRepository(self.session)
                 user_role_info = await role_repository.get_user_role_by_user_and_family(
                     assignment_item.user_id, family_id

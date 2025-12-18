@@ -1,6 +1,12 @@
 """User exceptions."""
 from uuid import UUID
-from src.exceptions import NotFoundError, ForbiddenError, ValidationError, UnauthenticatedError
+from src.exceptions import NotFoundError, ForbiddenError, ValidationError, UnauthenticatedError, ConflictError, BadRequestError
+from src.users.constants import (
+    ERROR_CANNOT_REACTIVATE_IN_SOFT_DELETED_FAMILY,
+    ERROR_CODE_BUSINESS_RULE_FAILED,
+    ERROR_DUPLICATE_USER_IDS,
+    ERROR_CODE_VALIDATION_FAILED,
+)
 
 
 class UserNotFound(NotFoundError):
@@ -58,8 +64,6 @@ class FamilySoftDeletedForUsers(UnauthenticatedError):
 
 
 # ==================== Invitation Exceptions ====================
-
-from src.exceptions import ConflictError, UnauthenticatedError, BadRequestError
 
 
 class DuplicateEmail(ConflictError):
@@ -136,4 +140,48 @@ class IncorrectPassword(UnauthenticatedError):
             message="Password change failed. Please verify your current password.",
             error_code="INCORRECT_PASSWORD",
             details=[{"field": "current_password", "issue": "Current password is incorrect."}],
+        )
+
+
+# ==================== SuperAdmin User Management Exceptions ====================
+
+class FamilyNotFound(NotFoundError):
+    """Target family not found or is soft-deleted."""
+    
+    def __init__(self, family_id: str):
+        super().__init__(
+            resource="Family",
+            resource_id=family_id
+        )
+
+
+class RoleNotFound(NotFoundError):
+    """Role not found."""
+    
+    def __init__(self, role_id: str):
+        super().__init__(
+            resource="Role",
+            resource_id=role_id
+        )
+
+
+class CannotReactivateInSoftDeletedFamily(ConflictError):
+    """Cannot reactivate user in soft-deleted family."""
+    
+    def __init__(self):
+        super().__init__(
+            message="Business rule violation: Cannot reactivate user in soft-deleted family.",
+            error_code=ERROR_CODE_BUSINESS_RULE_FAILED,
+            details=[{"field": "user", "issue": ERROR_CANNOT_REACTIVATE_IN_SOFT_DELETED_FAMILY}]
+        )
+
+
+class DuplicateUserIdsError(BadRequestError):
+    """Duplicate user IDs in array."""
+    
+    def __init__(self):
+        super().__init__(
+            message="Request validation failed.",
+            error_code=ERROR_CODE_VALIDATION_FAILED,
+            details=[{"field": "user_ids", "issue": ERROR_DUPLICATE_USER_IDS}]
         )

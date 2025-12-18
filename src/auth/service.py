@@ -25,6 +25,8 @@ from src.auth.schemas import (
     PasswordResetConfirmResponse,
 )
 from src.celery_worker import send_password_reset_email
+from src.users.service import UserService
+from src.users.exceptions import PasswordValidationFailed
 
 
 class AuthService:
@@ -235,12 +237,9 @@ class AuthService:
             raise ResetTokenExpired()
         
         # Validate password (similar to user service validation)
-        # Import password validation from users service
-        from src.users.service import UserService
         user_service = UserService(self.session)
         password_errors = user_service._validate_password(new_password, check_history=True, user=user)
         if password_errors:
-            from src.users.exceptions import PasswordValidationFailed
             raise PasswordValidationFailed(password_errors)
         
         # Update password

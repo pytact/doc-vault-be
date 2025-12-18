@@ -1,6 +1,7 @@
 """Celery task definitions."""
 import asyncio
 from src.celery_app import celery_app
+from src.config import settings
 from src.infra.email import send_invitation_email, send_email, load_email_template
 from src.database import AsyncSessionLocal
 from src.notification.service import NotificationService
@@ -36,8 +37,6 @@ If you have any questions, please don't hesitate to reach out.
 def send_password_reset_email(user_email: str, reset_token: str):
     """Send password reset email"""
     try:
-        from src.config import settings
-        
         reset_url = f"{settings.frontend_url}/reset-password?token={reset_token}"
         template = load_email_template("reset_password.html")
         html_body = template.replace("{{ reset_url }}", reset_url)

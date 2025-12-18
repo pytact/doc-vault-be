@@ -8,6 +8,7 @@ from src.auth.dependencies import get_current_user, oauth2_scheme
 from src.auth.utils import decode_token
 from src.auth.exceptions import InvalidToken
 from src.exceptions import ForbiddenError
+from src.families.service import FamilyService
 from src.users.models import User
 
 
@@ -80,7 +81,6 @@ class FamilyApiDep:
     """API dependency for family endpoints."""
     
     def __init__(self, session: AsyncSession):
-        from src.families.service import FamilyService
         self.service = FamilyService(session)
         self.session = session
     

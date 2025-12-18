@@ -1,7 +1,7 @@
 """Notification repository."""
 from uuid import UUID
 from typing import Optional, List, Tuple
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.notification.models import InAppNotification, ReminderSchedule
@@ -157,8 +157,6 @@ class NotificationRepository:
         if not notification:
             return None
         
-        from datetime import timezone
-        
         # Update read status based on is_read flag
         if is_read:
             # Mark as read - set read_at to current timestamp
@@ -179,8 +177,6 @@ class NotificationRepository:
         self, user_id: UUID, is_read: bool
     ) -> int:
         """Update read status for all notifications for user (mark all as read or unread)."""
-        from datetime import timezone
-        
         if is_read:
             # Mark all unread notifications as read
             result = await self.session.execute(
@@ -384,8 +380,6 @@ class NotificationRepository:
         Returns:
             List[ReminderSchedule]: Created schedule records
         """
-        from datetime import timedelta, timezone
-        
         schedules = []
         today = date.today()
         days_remaining = (expiry_date - today).days
@@ -469,8 +463,6 @@ class NotificationRepository:
         Returns:
             List[ReminderSchedule]: Pending schedules that are due to be sent
         """
-        from datetime import datetime, timezone
-        
         now = datetime.now(timezone.utc)
         
         result = await self.session.execute(
@@ -494,8 +486,6 @@ class NotificationRepository:
         Returns:
             Optional[ReminderSchedule]: Updated schedule or None if not found
         """
-        from datetime import datetime, timezone
-        
         result = await self.session.execute(
             select(ReminderSchedule)
             .where(ReminderSchedule.id == schedule_id)

@@ -12,6 +12,7 @@ from asyncpg.exceptions import (
     NotNullViolationError,
     CheckViolationError,
 )
+from src.utils import generate_request_id
 
 
 class AppException(HTTPException):
@@ -200,7 +201,6 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
     # Get X-Request-ID from request state (set by middleware) or generate new one
     request_id = getattr(request.state, "request_id", None)
     if not request_id:
-        from src.utils import generate_request_id
         request_id = generate_request_id()
     
     response = JSONResponse(
@@ -224,7 +224,6 @@ async def validation_exception_handler(
     # Get X-Request-ID from request state (set by middleware) or generate new one
     request_id = getattr(request.state, "request_id", None)
     if not request_id:
-        from src.utils import generate_request_id
         request_id = generate_request_id()
     
     details = [
@@ -252,7 +251,6 @@ async def response_validation_exception_handler(
     # Get X-Request-ID from request state (set by middleware) or generate new one
     request_id = getattr(request.state, "request_id", None)
     if not request_id:
-        from src.utils import generate_request_id
         request_id = generate_request_id()
     
     # Extract validation error details (ResponseValidationError has errors() method like RequestValidationError)
@@ -287,7 +285,6 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     # Get X-Request-ID from request state (set by middleware) or generate new one
     request_id = getattr(request.state, "request_id", None)
     if not request_id:
-        from src.utils import generate_request_id
         request_id = generate_request_id()
     
     response = JSONResponse(
@@ -357,7 +354,6 @@ async def database_exception_handler(request: Request, exc: Exception) -> JSONRe
         # Get X-Request-ID from request state (set by middleware) or generate new one
         request_id = getattr(request.state, "request_id", None)
         if not request_id:
-            from src.utils import generate_request_id
             request_id = generate_request_id()
         
         response = JSONResponse(
@@ -484,7 +480,6 @@ async def catch_all_exception_handler(request: Request, exc: Exception) -> JSONR
     # Get X-Request-ID from request state (set by middleware) or generate new one
     request_id = getattr(request.state, "request_id", None)
     if not request_id:
-        from src.utils import generate_request_id
         request_id = generate_request_id()
     
     response = JSONResponse(

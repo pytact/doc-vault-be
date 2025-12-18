@@ -23,6 +23,7 @@ from src.auth.utils import decode_token
 from src.auth.exceptions import InvalidToken
 from src.exceptions import ForbiddenError
 from src.users.models import User
+from src.users.repository import UserRepository
 from src.families.dependencies import get_current_superadmin
 
 
@@ -74,7 +75,6 @@ async def verify_profile_access(
     # FamilyAdmin and Member: need to check if target user is in same family
     if token_family_id:
         # Get target user's family
-        from src.users.repository import UserRepository
         user_repo = UserRepository(session)
         role_info = await user_repo.get_user_role_info(user_id)
         
@@ -146,18 +146,12 @@ async def get_current_user_me(
         current_user.id, if_none_match=if_none_match
     )
     
-    # Router only sets headers and returns response (no business logic, no conditionals)
-    for key, value in service_response.headers.items():
-        response.headers[key] = value
-    
     # Router mechanically returns response based on service response_type (no business logic)
     if service_response.response_type == "fastapi":
         return service_response.to_fastapi_response()
     
-    return StandardResponse(
-        data=service_response.data,
-        message="User details retrieved successfully",
-    )
+    # Router only returns the formatted response (no header manipulation)
+    return service_response.to_standard_response("User details retrieved successfully")
 
 
 @router.get(
@@ -175,23 +169,17 @@ async def get_profile(
     response: Response = None,
 ) -> StandardResponse[UserProfileRead] | FastAPIResponse:
     """Get user profile by user_id."""
-    # Pass If-None-Match to service (service handles all ETag logic)
+    # Service handles all business logic including ETag logic
     service_response = await api.get_current_user_profile(
         user_id, if_none_match=if_none_match
     )
-    
-    # Router only sets headers and returns response (no business logic, no conditionals)
-    for key, value in service_response.headers.items():
-        response.headers[key] = value
     
     # Router mechanically returns response based on service response_type (no business logic)
     if service_response.response_type == "fastapi":
         return service_response.to_fastapi_response()
     
-    return StandardResponse(
-        data=service_response.data,
-        message="Profile retrieved successfully",
-    )
+    # Router only returns the formatted response (no header manipulation)
+    return service_response.to_standard_response("Profile retrieved successfully")
 
 
 @router.patch(

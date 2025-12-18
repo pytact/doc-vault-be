@@ -1,9 +1,10 @@
 """User schemas."""
 from uuid import UUID
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from src.schemas import PagedCollection
+from src.users.exceptions import DuplicateUserIdsError
 
 if TYPE_CHECKING:
     from src.families.schemas import FamilyRead
@@ -42,6 +43,7 @@ class UserListRead(BaseModel):
     roles_summary: list[str]  # List of role names (single role per user)
     activation_state_label: str  # Derived label from status + invite_expire_at
     is_activation_expired: bool  # True if invite expired (for PendingActivation only)
+    family_id: Optional[UUID] = None  # Family ID (can be None for users without family)
     family_status: str  # Family status (Active, SoftDeleted)
     created_at: datetime
     created_by: Optional[UUID] = None
@@ -251,3 +253,47 @@ def _resolve_forward_refs():
 
 # Call at module level to resolve forward references
 _resolve_forward_refs()
+
+
+# ==================== SuperAdmin User Management Schemas ====================
+
+class UserReassignRequest(BaseModel):
+    """Request schema for user reassignment (SuperAdmin only)."""
+    family_id: UUID = Field(..., description="Target family identifier to reassign user to")
+    role_id: Optional[UUID] = Field(None, description="Optional role identifier to assign simultaneously")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request schema for bulk user deletion (SuperAdmin only)."""
+    user_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Array of user identifiers to soft-delete (min 1, max 100, all UUIDs must be unique)"
+    )
+    
+    @field_validator('user_ids')
+    @classmethod
+    def validate_unique_user_ids(cls, v: list[UUID]) -> list[UUID]:
+        """Validate that all user IDs are unique."""
+        if len(v) != len(set(v)):
+            raise DuplicateUserIdsError()
+        return v
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkDeleteResponse(BaseModel):
+    """Response schema for bulk user deletion."""
+    deleted_count: int = Field(..., description="Number of users successfully deleted")
+    skipped_count: int = Field(..., description="Number of users skipped (not found or already soft-deleted)")
+    deleted_user_ids: list[UUID] = Field(..., description="List of user IDs that were deleted")
+    skipped_user_ids: list[UUID] = Field(..., description="List of user IDs that were skipped")
+    skipped_reasons: Dict[str, str] = Field(
+        ...,
+        description="Dictionary mapping skipped user IDs to reason strings"
+    )
+    
+    model_config = ConfigDict(from_attributes=True)

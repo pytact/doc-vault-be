@@ -4,15 +4,15 @@ from typing import Optional
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session
+from src.documents.service import DocumentService
 from src.users.models import User
 
 
 # API Dependency Pattern (RULE 8.6.7)
 class DocumentApiDep:
     """API dependency for document endpoints."""
-    
+
     def __init__(self, session: AsyncSession):
-        from src.documents.service import DocumentService
         self.service = DocumentService(session)
         self.session = session
     
@@ -107,9 +107,8 @@ def get_document_api(session: AsyncSession = Depends(get_session)) -> DocumentAp
 
 class DocumentAssignmentApiDep:
     """API dependency for document assignment endpoints."""
-    
+
     def __init__(self, session: AsyncSession):
-        from src.documents.service import DocumentService
         self.service = DocumentService(session)
         self.session = session
     

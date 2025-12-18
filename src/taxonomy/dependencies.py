@@ -2,6 +2,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session
+from src.taxonomy.service import TaxonomyService
 
 
 # API Dependency Pattern (RULE 8.6.7)
@@ -9,7 +10,6 @@ class TaxonomyApiDep:
     """API dependency for taxonomy endpoints."""
     
     def __init__(self, session: AsyncSession):
-        from src.taxonomy.service import TaxonomyService
         self.service = TaxonomyService(session)
         self.session = session
     

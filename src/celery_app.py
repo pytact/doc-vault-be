@@ -3,6 +3,8 @@ from celery import Celery
 from celery.schedules import crontab
 from src.config import settings
 
+import src.celery_worker  # noqa: F401
+
 celery_app = Celery(
     "doc_vault",
     broker=settings.celery_broker_url,
@@ -26,7 +28,4 @@ celery_app.conf.update(
         },
     },
 )
-
-# Import tasks to register them with Celery
-import src.celery_worker  # noqa: F401
 

@@ -9,6 +9,7 @@ from src.auth.utils import decode_token
 from src.auth.exceptions import InvalidToken
 from src.exceptions import ForbiddenError
 from src.users.models import User
+from src.users.service import UserService
 from src.families.dependencies import get_current_admin_or_member
 
 
@@ -56,7 +57,6 @@ class UserApiDep:
     """API dependency for user endpoints."""
     
     def __init__(self, session: AsyncSession):
-        from src.users.service import UserService
         self.service = UserService(session)
         self.session = session
     
@@ -162,6 +162,39 @@ class UserApiDep:
         return await self.service.resend_invitation(
             user_id, current_user_id, current_user_is_superadmin, current_user_family_id
         )
+    
+    # ==================== SuperAdmin User Management Methods ====================
+    
+    async def reassign_user(
+        self,
+        user_id: UUID,
+        data,
+        current_user_id: UUID,
+        if_match: Optional[str] = None,
+    ):
+        """Reassign user to different family."""
+        return await self.service.reassign_user(
+            user_id, data, current_user_id, if_match=if_match
+        )
+    
+    async def reactivate_user(
+        self,
+        user_id: UUID,
+        current_user_id: UUID,
+        if_match: Optional[str] = None,
+    ):
+        """Reactivate soft-deleted user."""
+        return await self.service.reactivate_user(
+            user_id, current_user_id, if_match=if_match
+        )
+    
+    async def bulk_delete_users(
+        self,
+        data,
+        current_user_id: UUID,
+    ):
+        """Bulk delete multiple users."""
+        return await self.service.bulk_delete_users(data, current_user_id)
 
 
 def get_user_api(session: AsyncSession = Depends(get_session)) -> UserApiDep:

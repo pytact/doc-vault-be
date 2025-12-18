@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_session
+from src.notification.service import NotificationService
 from src.users.models import User
 
 
@@ -12,7 +13,6 @@ class NotificationApiDep:
     """API dependency for notification endpoints."""
     
     def __init__(self, session: AsyncSession):
-        from src.notification.service import NotificationService
         self.service = NotificationService(session)
         self.session = session
     

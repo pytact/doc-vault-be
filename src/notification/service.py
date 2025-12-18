@@ -42,6 +42,10 @@ from src.auth.utils import decode_token
 from src.users.models import User
 from src.response import ServiceResponse
 from src.utils import generate_etag, format_last_modified
+from src.exceptions import PreconditionRequiredError, PreconditionFailedError
+from src.infra.email import send_email, load_email_template
+from src.config import settings
+from src.roles.models import UserRole, Role
 from fastapi import status
 
 
@@ -322,7 +326,6 @@ class NotificationService:
         
         # ETag validation (business logic in service) - REQUIRED for PATCH operations
         if not if_match:
-            from src.exceptions import PreconditionRequiredError
             raise PreconditionRequiredError(
                 message="If-Match header is required for update operations",
                 details=[{"field": "etag", "issue": "If-Match header is required"}],
@@ -333,7 +336,6 @@ class NotificationService:
         # Remove quotes if present
         if_match_clean = if_match.strip('"')
         if if_match_clean != current_etag:
-            from src.exceptions import PreconditionFailedError
             raise PreconditionFailedError(
                 message="Resource has been modified since retrieval. Please fetch the latest version and retry.",
                 details=[{"field": "etag", "issue": "Resource version mismatch"}],
@@ -526,9 +528,6 @@ class NotificationService:
         Returns:
             bool: True if email sent successfully, False otherwise
         """
-        from src.infra.email import send_email, load_email_template
-        from src.config import settings
-        
         # Calculate days until expiry
         today = date.today()
         if not document.expiry_date:
@@ -733,7 +732,6 @@ Please renew this document before it expires.
                 is_owner = document.owner_id == user.id
                 
                 # Check if user is FamilyAdmin in document's family
-                from src.roles.models import UserRole, Role
                 familyadmin_result = await self.session.execute(
                     select(UserRole)
                     .join(Role, UserRole.role_id == Role.id)

@@ -26,6 +26,7 @@ from src.users.exceptions import UserNotFound, FamilySoftDeletedForUsers
 from src.families.exceptions import FamilyNotFound
 from src.response import ServiceResponse
 from src.utils import generate_etag, format_last_modified
+from src.exceptions import PreconditionRequiredError, PreconditionFailedError, ValidationError
 
 
 class RoleService:
@@ -83,14 +84,10 @@ class RoleService:
         
         # ETag validation (business logic in service) - REQUIRED per spec
         if not if_match:
-            from src.exceptions import PreconditionRequiredError
             raise PreconditionRequiredError(
                 message="If-Match header required for update operations.",
                 details=[{"field": "If-Match", "issue": "If-Match header is required"}],
             )
-        
-        from src.utils import generate_etag
-        from src.exceptions import PreconditionFailedError
         current_etag = generate_etag(user.updated_at)
         if if_match != current_etag:
             raise PreconditionFailedError(
@@ -100,7 +97,6 @@ class RoleService:
         
         # User must have status = Active or PendingActivation (cannot update roles if SoftDeleted)
         if user.is_del:
-            from src.exceptions import ValidationError
             raise ValidationError(
                 message="User is SoftDeleted (cannot update roles).",
                 error_code="BUSINESS_RULE_FAILED",

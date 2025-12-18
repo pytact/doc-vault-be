@@ -10,6 +10,7 @@ from src.database import get_session
 from src.auth.utils import decode_token
 from src.auth.exceptions import InvalidToken, TokenExpired
 from src.auth.repository import AuthRepository
+from src.auth.service import AuthService
 from src.users.models import User
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,6 @@ class AuthApiDep:
     """API dependency for authentication endpoints."""
     
     def __init__(self, session: AsyncSession):
-        from src.auth.service import AuthService
         self.service = AuthService(session)
         self.session = session
     

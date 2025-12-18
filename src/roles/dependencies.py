@@ -8,6 +8,7 @@ from src.auth.dependencies import get_current_user, oauth2_scheme
 from src.auth.utils import decode_token
 from src.auth.exceptions import InvalidToken
 from src.exceptions import ForbiddenError
+from src.roles.service import RoleService
 from src.users.models import User
 from src.users.dependencies import get_current_admin
 
@@ -17,7 +18,6 @@ class RoleApiDep:
     """API dependency for role endpoints."""
     
     def __init__(self, session: AsyncSession):
-        from src.roles.service import RoleService
         self.service = RoleService(session)
         self.session = session
     

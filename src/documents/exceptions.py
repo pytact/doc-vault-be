@@ -31,6 +31,12 @@ from src.documents.constants import (
     ERROR_CODE_FILE_NOT_UPLOADED,
     ERROR_CODE_ETAG_MISMATCH,
     ERROR_CODE_ETAG_REQUIRED,
+    ERROR_SELF_ASSIGNMENT_BLOCKED,
+    ERROR_CODE_SELF_ASSIGNMENT_BLOCKED,
+    ERROR_USER_NOT_IN_FAMILY,
+    ERROR_CODE_USER_NOT_IN_FAMILY,
+    ERROR_ASSIGNMENT_PERMISSION_DENIED,
+    ERROR_CODE_ASSIGNMENT_PERMISSION_DENIED,
 )
 
 
@@ -178,12 +184,8 @@ class AssignmentNotFound(NotFoundError):
 
 class SelfAssignmentBlocked(ConflictError):
     """Cannot assign access to document owner."""
-    
+
     def __init__(self):
-        from src.documents.constants import (
-            ERROR_SELF_ASSIGNMENT_BLOCKED,
-            ERROR_CODE_SELF_ASSIGNMENT_BLOCKED,
-        )
         super().__init__(
             message=ERROR_SELF_ASSIGNMENT_BLOCKED,
             error_code=ERROR_CODE_SELF_ASSIGNMENT_BLOCKED,
@@ -193,12 +195,8 @@ class SelfAssignmentBlocked(ConflictError):
 
 class UserNotInFamily(ConflictError):
     """User is not in the same Family as the document."""
-    
+
     def __init__(self, user_id: str):
-        from src.documents.constants import (
-            ERROR_USER_NOT_IN_FAMILY,
-            ERROR_CODE_USER_NOT_IN_FAMILY,
-        )
         super().__init__(
             message=ERROR_USER_NOT_IN_FAMILY,
             error_code=ERROR_CODE_USER_NOT_IN_FAMILY,
@@ -208,12 +206,8 @@ class UserNotInFamily(ConflictError):
 
 class AssignmentPermissionDenied(ForbiddenError):
     """Insufficient permissions to manage document assignments."""
-    
+
     def __init__(self):
-        from src.documents.constants import (
-            ERROR_ASSIGNMENT_PERMISSION_DENIED,
-            ERROR_CODE_ASSIGNMENT_PERMISSION_DENIED,
-        )
         super().__init__(
             message=ERROR_ASSIGNMENT_PERMISSION_DENIED,
             error_code=ERROR_CODE_ASSIGNMENT_PERMISSION_DENIED,

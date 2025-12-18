@@ -75,24 +75,18 @@ async def get_user(
         family_id, token, session
     )
     
-    # Pass If-None-Match to service (service handles all ETag logic)
+    # Service handles all business logic including ETag logic
     service_response = await api.get_user_by_id(
         family_id, user_id, current_user_role, current_user_is_superadmin,
         if_none_match=if_none_match
     )
     
-    # Router only sets headers and returns response (no business logic, no conditionals)
-    for key, value in service_response.headers.items():
-        response.headers[key] = value
-    
     # Router mechanically returns response based on service response_type (no business logic)
     if service_response.response_type == "fastapi":
         return service_response.to_fastapi_response()
     
-    return StandardResponse(
-        data=service_response.data,
-        message="User retrieved successfully",
-    )
+    # Router only returns the formatted response (no header manipulation)
+    return service_response.to_standard_response("User retrieved successfully")
 
 
 @router.delete(
@@ -117,19 +111,12 @@ async def soft_delete_user(
         family_id, token, session
     )
     
-    # Pass If-Match to service (service handles ETag validation)
-    result = await api.soft_delete_user(
+    # Service handles all business logic including ETag validation and headers
+    service_response = await api.soft_delete_user(
         family_id, user_id, current_user.id,
         current_user_role, current_user_is_superadmin,
         if_match=if_match
     )
     
-    # Router only sets headers from service result (no business logic)
-    # Service attaches _etag to schema - router sets it if present
-    if hasattr(result, '_etag'):
-        response.headers["ETag"] = result._etag
-    
-    return StandardResponse(
-        data=result,
-        message="User soft-deleted successfully",
-    )
+    # Router only returns the formatted response (no header manipulation)
+    return service_response.to_standard_response("User soft-deleted successfully")

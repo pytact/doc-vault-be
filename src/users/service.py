@@ -1,12 +1,12 @@
 """User service."""
 from uuid import UUID
-from typing import Optional
+from typing import Optional, Dict, List
 from datetime import datetime, timezone
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.users.repository import UserRepository
 from src.utils import generate_etag, format_last_modified
-from src.exceptions import PreconditionRequiredError, PreconditionFailedError
+from src.exceptions import PreconditionRequiredError, PreconditionFailedError, ValidationError, ForbiddenError
 from src.response import ServiceResponse
 from src.users.schemas import (
     UserListQuery,
@@ -25,6 +25,9 @@ from src.users.schemas import (
     UserProfileRead,
     UserProfileUpdate,
     UserMeRead,
+    UserReassignRequest,
+    BulkDeleteRequest,
+    BulkDeleteResponse,
 )
 from src.users.exceptions import (
     UserNotFound,
@@ -39,6 +42,9 @@ from src.users.exceptions import (
     PasswordValidationFailed,
     PasswordReuseViolation,
     IncorrectPassword,
+    FamilyNotFound,
+    RoleNotFound,
+    CannotReactivateInSoftDeletedFamily,
 )
 from src.users.constants import (
     USER_STATUS_API_ACTIVE,
@@ -48,6 +54,10 @@ from src.users.constants import (
     FAMILY_STATUS_API_SOFT_DELETED,
 )
 from src.pagination import calculate_total_pages
+from src.celery_worker import send_invitation_email_task
+from src.families.exceptions import FamilyNotFound
+from src.families.schemas import FamilyRead
+from src.roles.schemas import RoleRead
 from src.users.models import User
 from src.roles.models import UserRole, Role
 from src.families.models import Family
@@ -135,6 +145,7 @@ class UserService:
             roles_summary=roles_summary,
             activation_state_label=activation_label,
             is_activation_expired=is_expired,
+            family_id=family.id if family else None,
             family_status=family_status,
             created_at=user.created_at,
             created_by=user.created_by,
@@ -369,7 +380,7 @@ class UserService:
         current_user_role: str,
         current_user_is_superadmin: bool,
         if_match: Optional[str] = None,
-    ) -> UserDetailRead:
+    ) -> ServiceResponse[UserDetailRead]:
         """Soft delete user with cascade to documents and ETag validation (business logic in service)."""
         # Verify family exists and is not soft-deleted
         family = await self.repository.get_family_by_id(family_id)
@@ -430,9 +441,21 @@ class UserService:
         
         user = await self.repository.soft_delete(current_user)
         
-        return self._user_to_detail_schema(
+        # Return schema with ETag header (business logic in service)
+        user_detail = self._user_to_detail_schema(
             user, user_role, role, family_from_role or family, family_id,
             current_user_role, current_user_is_superadmin
+        )
+
+        # Generate ETag for the updated resource
+        etag = generate_etag(user.updated_at)
+
+        return ServiceResponse(
+            data=user_detail,
+            status_code=status.HTTP_200_OK,
+            headers={
+                "ETag": etag,
+            },
         )
     
     # ==================== Invitation Service Methods ====================
@@ -498,7 +521,6 @@ class UserService:
         # For now, family_id is required (current data model requires UserRole with family_id)
         # TODO: Support SuperAdmin user creation without family_id if data model is updated
         if family_id is None:
-            from src.exceptions import ValidationError
             raise ValidationError(
                 message="family_id is required. SuperAdmin user creation without family_id is not yet supported.",
                 error_code="VALIDATION_ERROR",
@@ -508,11 +530,9 @@ class UserService:
         # Verify family exists and is not soft-deleted
         family = await self.repository.get_family_by_id(family_id)
         if not family:
-            from src.families.exceptions import FamilyNotFound
             raise FamilyNotFound(str(family_id))
         
         if family.is_del:
-            from src.users.exceptions import FamilySoftDeletedForUsers
             raise FamilySoftDeletedForUsers()
         
         # Check if user with email already exists (case-insensitive)
@@ -549,7 +569,6 @@ class UserService:
             # Validate that the provided role exists
             provided_role = await self.role_repository.get_by_id(data.role_id)
             if not provided_role:
-                from src.exceptions import ValidationError
                 raise ValidationError(
                     message=f"Role with ID {data.role_id} not found",
                     error_code="VALIDATION_ERROR",
@@ -562,7 +581,6 @@ class UserService:
             # SuperAdmin cannot be assigned to a family (must have family_id = NULL)
             # Since current implementation requires family_id, SuperAdmin creation is not supported
             if role_name == "superadmin":
-                from src.exceptions import ValidationError
                 raise ValidationError(
                     message="SuperAdmin role cannot be assigned to a family. SuperAdmin user creation without family_id is not yet supported.",
                     error_code="VALIDATION_ERROR",
@@ -571,7 +589,6 @@ class UserService:
             
             # FamilyAdmin and Member are valid for family assignments
             if role_name not in ["familyadmin", "member"]:
-                from src.exceptions import ValidationError
                 raise ValidationError(
                     message=f"Invalid role '{role_name}' for family assignment. Only 'familyadmin' and 'member' roles are allowed.",
                     error_code="VALIDATION_ERROR",
@@ -597,7 +614,6 @@ class UserService:
         await self.role_repository.create_user_role(user_role)
         
         # Send invitation email via Celery task
-        from src.celery_worker import send_invitation_email_task
         send_invitation_email_task.delay(
             user_email=user.email,
             invitation_token=user.invite_token,
@@ -631,7 +647,6 @@ class UserService:
         
         # User must have status = PendingActivation
         if user.status != "pending":
-            from src.exceptions import ValidationError
             raise ValidationError(
                 message="User status is not PendingActivation (cannot resend invitation).",
                 error_code="BUSINESS_RULE_FAILED",
@@ -649,7 +664,6 @@ class UserService:
         # Authorization check: SuperAdmin can resend for any user, FamilyAdmin only for users in their own family
         if not current_user_is_superadmin:
             if not current_user_family_id or str(user_family_id) != str(current_user_family_id):
-                from src.exceptions import ForbiddenError
                 raise ForbiddenError(
                     message="Insufficient permissions. FamilyAdmin can only resend invitations for users in their own family.",
                     error_code="INSUFFICIENT_PERMISSIONS",
@@ -658,7 +672,6 @@ class UserService:
         
         # Check if family is soft-deleted
         if family and family.is_del:
-            from src.users.exceptions import FamilySoftDeletedForUsers
             raise FamilySoftDeletedForUsers()
         
         # Generate new invitation token
@@ -677,7 +690,6 @@ class UserService:
         await self.session.refresh(user)
         
         # Send invitation email via Celery task
-        from src.celery_worker import send_invitation_email_task
         family_name = family.name if family else None
         send_invitation_email_task.delay(
             user_email=user.email,
@@ -785,7 +797,6 @@ class UserService:
             raise InvalidInvitationToken()
         
         if user.is_del:
-            from src.users.exceptions import UserSoftDeleted
             raise UserSoftDeleted()
         
         if user.status != "pending":
@@ -803,7 +814,6 @@ class UserService:
         if role_info:
             user_role, role, family = role_info
             if family and family.is_del:
-                from src.users.exceptions import FamilySoftDeletedForUsers
                 raise FamilySoftDeletedForUsers()
         
         # Validate password (no history check for new users)
@@ -875,7 +885,6 @@ class UserService:
         
         # If soft-deleted, return 401 (force logout)
         if user.is_del:
-            from src.users.exceptions import UserSoftDeleted
             raise UserSoftDeleted()
         
         # Get user's role and family information
@@ -890,7 +899,6 @@ class UserService:
             if family:
                 # Check if family is soft-deleted (force logout)
                 if family.is_del:
-                    from src.users.exceptions import FamilySoftDeletedForUsers
                     raise FamilySoftDeletedForUsers()
                 family_name = family.name
         
@@ -979,7 +987,6 @@ class UserService:
         
         # If soft-deleted, return 401 (force logout)
         if user.is_del:
-            from src.users.exceptions import UserSoftDeleted
             raise UserSoftDeleted()
         
         # Get user's role and family information
@@ -992,11 +999,9 @@ class UserService:
             if family:
                 # Check if family is soft-deleted (force logout)
                 if family.is_del:
-                    from src.users.exceptions import FamilySoftDeletedForUsers
                     raise FamilySoftDeletedForUsers()
                 
                 # Map family to FamilyRead schema
-                from src.families.schemas import FamilyRead
                 # Map family status to API format
                 family_status_api = FAMILY_STATUS_API_SOFT_DELETED if family.is_del else FAMILY_STATUS_API_ACTIVE
                 family_obj = FamilyRead(
@@ -1014,7 +1019,6 @@ class UserService:
             
             if role:
                 # Map role to RoleRead schema
-                from src.roles.schemas import RoleRead
                 role_obj = RoleRead(
                     id=role.id,
                     name=role.name,
@@ -1097,7 +1101,6 @@ class UserService:
         
         # If soft-deleted, return 401 (force logout)
         if user.is_del:
-            from src.users.exceptions import UserSoftDeleted
             raise UserSoftDeleted()
         
         # Get user's role and family information
@@ -1112,7 +1115,6 @@ class UserService:
             if family:
                 # Check if family is soft-deleted (force logout)
                 if family.is_del:
-                    from src.users.exceptions import FamilySoftDeletedForUsers
                     raise FamilySoftDeletedForUsers()
                 family_name = family.name
         
@@ -1133,7 +1135,6 @@ class UserService:
         # User must have status = Active (cannot update if PendingActivation or SoftDeleted)
         status_api = self._map_user_status_to_api(user)
         if status_api != USER_STATUS_API_ACTIVE:
-            from src.exceptions import ValidationError
             raise ValidationError(
                 message="User status is not Active (cannot edit).",
                 error_code="BUSINESS_RULE_FAILED",
@@ -1142,7 +1143,6 @@ class UserService:
         
         # Validate that at least one field is being updated
         if data.name is None and data.password is None:
-            from src.exceptions import ValidationError
             raise ValidationError(
                 message="At least one field (name or password) must be provided for update.",
                 error_code="VALIDATION_ERROR",
@@ -1153,7 +1153,6 @@ class UserService:
         if data.password is not None:
             # Current password is required when updating password
             if not data.current_password:
-                from src.exceptions import ValidationError
                 raise ValidationError(
                     message="current_password is required when updating password.",
                     error_code="VALIDATION_ERROR",
@@ -1214,3 +1213,389 @@ class UserService:
         profile_read._last_modified = format_last_modified(user.updated_at)
         
         return profile_read
+    
+    # ==================== SuperAdmin User Management Methods ====================
+    
+    async def reassign_user(
+        self,
+        user_id: UUID,
+        data,
+        updated_by: UUID,
+        if_match: Optional[str] = None,
+    ):
+        """Reassign user to different family with optional role change.
+        
+        Business Rules:
+        1. User must exist and not be soft-deleted (if soft-deleted, return 404)
+        2. Target family must exist and not be soft-deleted (if soft-deleted, return 404)
+        3. If role_id is provided, role must exist (if not found, return 404)
+        4. User can be reassigned to any family (freely allowed per F-007)
+        5. Reassignment cascades:
+           - Moves user to new family
+           - Moves all user-owned documents to new family
+           - Deletes all existing DocumentAssignments for the user
+           - Cancels all ReminderSchedules for the user
+        6. If role_id is provided, assigns new role simultaneously
+        7. If role_id is not provided, user keeps existing role in new family context
+        """
+        
+        # Get user with role info
+        user_info = await self.repository.get_user_with_role_info(user_id)
+        if not user_info:
+            raise UserNotFound(str(user_id))
+        
+        user, existing_user_role, existing_role, existing_family = user_info
+        
+        # Validate user is not soft-deleted
+        if user.is_del:
+            raise UserNotFound(str(user_id))
+        
+        # Validate ETag if provided
+        if if_match:
+            current_etag = generate_etag(user.updated_at)
+            if if_match != current_etag:
+                raise PreconditionFailedError(
+                    message="Resource version mismatch. The resource was modified by another user.",
+                    error_code="PRECONDITION_FAILED",
+                    details=[{"field": "etag", "issue": "Resource has been modified since retrieval. Please fetch the latest version and retry."}]
+                )
+        
+        # Validate target family exists and is not soft-deleted
+        target_family = await self.repository.get_family_by_id(data.family_id)
+        if not target_family:
+            raise FamilyNotFound(str(data.family_id))
+        if target_family.is_del:
+            raise FamilyNotFound(str(data.family_id))
+        
+        # Determine role_id to use
+        role_id_to_use: UUID
+        if data.role_id:
+            # Validate role exists
+            role = await self.repository.get_role_by_id(data.role_id)
+            if not role:
+                raise RoleNotFound(str(data.role_id))
+            role_id_to_use = data.role_id
+        else:
+            # Keep existing role
+            if not existing_role:
+                # User has no role - default to "member" role
+                role_repo = RoleRepository(self.session)
+                member_role = await role_repo.get_by_name("member")
+                if not member_role:
+                    raise RoleNotFound("member")
+                role_id_to_use = member_role.id
+            else:
+                role_id_to_use = existing_role.id
+        
+        # Start transaction - all operations must succeed or none
+        try:
+            # 1. Get the current active UserRole for this user
+            # A user should have only ONE active UserRole at a time
+            current_active_user_role = existing_user_role
+            
+            # 2. Check if there's an existing UserRole (including soft-deleted) for the target family
+            existing_target_user_role = await self.repository.get_user_role_for_family(
+                user_id, data.family_id
+            )
+            
+            # 3. Soft delete ALL other active UserRoles for this user (excluding the one we'll update)
+            # This ensures only one active role exists
+            all_active_user_roles = await self.repository.get_all_active_user_roles(user_id)
+            for user_role in all_active_user_roles:
+                # Skip the current active role if it exists (we'll update it instead of deleting)
+                if current_active_user_role and user_role.id == current_active_user_role.id:
+                    continue
+                # Skip the target family's role if it exists (we'll reactivate it instead)
+                if existing_target_user_role and user_role.id == existing_target_user_role.id:
+                    continue
+                await self.repository.soft_delete_user_role(user_role, updated_by)
+            
+            # 4. Update or create the UserRole for the target family
+            now = datetime.now(timezone.utc)
+            if existing_target_user_role:
+                # Reactivate and update the existing UserRole for target family
+                existing_target_user_role.is_del = False
+                existing_target_user_role.deleted_at = None
+                existing_target_user_role.deleted_by = None
+                existing_target_user_role.family_id = data.family_id
+                existing_target_user_role.role_id = role_id_to_use
+                existing_target_user_role.updated_at = now
+                existing_target_user_role.updated_by = updated_by
+                await self.session.flush()
+                await self.session.refresh(existing_target_user_role)
+                new_user_role = existing_target_user_role
+                
+                # If the current active role is different from the target role, soft-delete it
+                if current_active_user_role and current_active_user_role.id != existing_target_user_role.id:
+                    await self.repository.soft_delete_user_role(current_active_user_role, updated_by)
+            elif current_active_user_role:
+                # Update the existing active UserRole's family_id and role_id
+                # This is the correct approach: UPDATE instead of DELETE + CREATE
+                current_active_user_role.family_id = data.family_id
+                current_active_user_role.role_id = role_id_to_use
+                current_active_user_role.updated_at = now
+                current_active_user_role.updated_by = updated_by
+                await self.session.flush()
+                await self.session.refresh(current_active_user_role)
+                new_user_role = current_active_user_role
+            else:
+                # User has no active role - create new UserRole for target family
+                new_user_role = await self.repository.create_user_role(
+                    user_id=user_id,
+                    family_id=data.family_id,
+                    role_id=role_id_to_use,
+                    created_by=updated_by,
+                    updated_by=updated_by,
+                )
+            
+            # 3. Get all documents owned by user
+            documents = await self.repository.get_documents_by_owner(user_id)
+            document_ids = [doc.id for doc in documents]
+            
+            # 5. Move all documents to new family
+            if document_ids:
+                await self.repository.bulk_update_document_family(
+                    document_ids=document_ids,
+                    new_family_id=data.family_id,
+                    updated_by=updated_by,
+                )
+            
+            # 6. Delete all DocumentAssignments for the user
+            await self.repository.delete_assignments_by_user(user_id, updated_by)
+            
+            # 7. Cancel all ReminderSchedules for the user
+            await self.repository.cancel_schedules_by_user(user_id)
+            
+            # 8. Delete all InAppNotifications for the user (related to old family)
+            await self.repository.delete_notifications_by_user(user_id)
+            
+            # 9. Update user's updated_at timestamp
+            now = datetime.now(timezone.utc)
+            user.updated_at = now
+            user.updated_by = updated_by
+            await self.session.commit()
+            await self.session.refresh(user)
+            
+            # 10. Get updated user with role info
+            updated_user_info = await self.repository.get_user_with_role_info(user_id)
+            if not updated_user_info:
+                raise UserNotFound(str(user_id))
+            
+            updated_user, updated_user_role, updated_role, updated_family = updated_user_info
+            
+            # Build response
+            return self._user_to_detail_schema(
+                user=updated_user,
+                user_role=updated_user_role,
+                role=updated_role,
+                family=updated_family or target_family,
+                family_id=data.family_id,
+                current_user_role="superadmin",
+                current_user_is_superadmin=True,
+            )
+            
+        except Exception:
+            await self.session.rollback()
+            raise
+    
+    async def reactivate_user(
+        self,
+        user_id: UUID,
+        updated_by: UUID,
+        if_match: Optional[str] = None,
+    ):
+        """Reactivate soft-deleted user.
+        
+        Business Rules:
+        1. User must exist (if not found, return 404)
+        2. User must be soft-deleted (is_del = true) to reactivate
+        3. If user is already active (is_del = false), operation is idempotent and returns success
+        4. User's family must not be soft-deleted (if family is soft-deleted, return 409 - cannot reactivate user in soft-deleted family)
+        5. Reactivation follows F-001 reactivation rules
+        6. Changes user status from SoftDeleted to Active
+        7. Sets is_del = false and clears deleted_at and deleted_by fields
+        """
+        
+        # Get user directly (including soft-deleted)
+        user = await self.repository.get_by_id(user_id)
+        if not user:
+            raise UserNotFound(str(user_id))
+        
+        # Validate ETag if provided
+        if if_match:
+            current_etag = generate_etag(user.updated_at)
+            if if_match != current_etag:
+                raise PreconditionFailedError(
+                    message="Resource version mismatch. The resource was modified by another user.",
+                    error_code="PRECONDITION_FAILED",
+                    details=[{"field": "etag", "issue": "Resource has been modified since retrieval. Please fetch the latest version and retry."}]
+                )
+        
+        # Get UserRole (including soft-deleted)
+        user_role = await self.repository.get_user_role_by_user_id(user_id)
+        if not user_role or not user_role.family_id:
+            # User has no family (SuperAdmin) - cannot reactivate via this endpoint
+            # This endpoint is for users in families only
+            raise UserNotFound(str(user_id))
+        
+        family_id = user_role.family_id
+        
+        # Get Role and Family for validation
+        role_repo = RoleRepository(self.session)
+        role = await role_repo.get_by_id(user_role.role_id)
+        if not role:
+            raise RoleNotFound(str(user_role.role_id))
+        
+        family = await self.repository.get_family_by_id(family_id)
+        if not family:
+            raise FamilyNotFound(str(family_id))
+        
+        # If user is already active, return success (idempotent)
+        if not user.is_del and not user_role.is_del:
+            # User and UserRole are already active - return current state
+            return self._user_to_detail_schema(
+                user=user,
+                user_role=user_role,
+                role=role,
+                family=family,
+                family_id=family_id,
+                current_user_role="superadmin",
+                current_user_is_superadmin=True,
+            )
+        
+        # Validate user's family is not soft-deleted
+        if family.is_del:
+            raise CannotReactivateInSoftDeletedFamily()
+        
+        # Start transaction - reactivate both user and UserRole
+        try:
+            # Reactivate user (set is_del=False, status="active", clear deleted_at, deleted_by)
+            now = datetime.now(timezone.utc)
+            user.is_del = False
+            user.status = "active"  # Set status to active (opposite of soft_delete which sets to "inactive")
+            user.deleted_at = None
+            user.deleted_by = None
+            user.updated_at = now
+            user.updated_by = updated_by
+            
+            # Reactivate UserRole (set is_del=False, clear deleted_at, deleted_by)
+            await self.repository.reactivate_user_role(user_role, updated_by)
+            
+            # Commit transaction
+            await self.session.commit()
+            await self.session.refresh(user)
+            await self.session.refresh(user_role)
+            
+            # Get updated user with role info
+            updated_user_info = await self.repository.get_user_with_role_info(user_id)
+            if not updated_user_info:
+                raise UserNotFound(str(user_id))
+            
+            updated_user, updated_user_role, updated_role, updated_family = updated_user_info
+            
+            # Verify family_id is still present
+            if not updated_user_role or not updated_user_role.family_id:
+                raise UserNotFound(str(user_id))
+            
+            family_id = updated_user_role.family_id
+            
+            # Build response
+            return self._user_to_detail_schema(
+                user=updated_user,
+                user_role=updated_user_role,
+                role=updated_role,
+                family=updated_family or family,
+                family_id=family_id,
+                current_user_role="superadmin",
+                current_user_is_superadmin=True,
+            )
+            
+        except Exception:
+            await self.session.rollback()
+            raise
+    
+    async def bulk_delete_users(
+        self,
+        data,
+        deleted_by: UUID,
+    ):
+        """Bulk soft-delete multiple users.
+        
+        Business Rules:
+        1. At least one user ID must be provided (min 1 item in array)
+        2. Maximum 100 user IDs per request (max 100 items in array)
+        3. All user IDs must be unique (no duplicates in array)
+        4. All user IDs must be valid UUIDs (if invalid, return 400)
+        5. Validation Phase: Before transaction starts:
+           - Users that don't exist are identified and will be skipped (not an error)
+           - Users that are already soft-deleted are identified and will be skipped (not an error)
+           - Only valid, active users proceed to transaction phase
+        6. Transaction Phase: For all valid users that exist and are not soft-deleted:
+           - Operation is transactional - either ALL valid users are deleted atomically, or NONE
+           - For each valid user:
+             - Soft-deletes the user
+             - Cascades to user-owned documents (soft-deletes them)
+             - Deletes all DocumentAssignments for the user
+             - Cancels all ReminderSchedules for the user
+        7. Returns summary of deleted users and skipped users
+        """
+        
+        # Validation Phase: Identify users to skip
+        users = await self.repository.get_users_by_ids(data.user_ids)
+        user_dict = {user.id: user for user in users}
+        
+        valid_user_ids: List[UUID] = []
+        skipped_user_ids: List[UUID] = []
+        skipped_reasons: Dict[str, str] = {}
+        
+        for user_id in data.user_ids:
+            if user_id not in user_dict:
+                # User doesn't exist
+                skipped_user_ids.append(user_id)
+                skipped_reasons[str(user_id)] = "User not found or already soft-deleted"
+            elif user_dict[user_id].is_del:
+                # User already soft-deleted
+                skipped_user_ids.append(user_id)
+                skipped_reasons[str(user_id)] = "User not found or already soft-deleted"
+            else:
+                # Valid user
+                valid_user_ids.append(user_id)
+        
+        # Transaction Phase: Delete all valid users atomically
+        deleted_user_ids: List[UUID] = []
+        
+        if valid_user_ids:
+            try:
+                for user_id in valid_user_ids:
+                    # Soft delete user
+                    await self.repository.soft_delete_user(user_id, deleted_by)
+                    
+                    # Cascade to documents
+                    await self.repository.soft_delete_documents_by_owner(user_id, deleted_by)
+                    
+                    # Delete assignments
+                    await self.repository.delete_assignments_by_user(user_id, deleted_by)
+                    
+                    # Cancel schedules
+                    await self.repository.cancel_schedules_by_user(user_id)
+                    
+                    deleted_user_ids.append(user_id)
+                
+                # Commit transaction
+                await self.session.commit()
+                
+            except Exception:
+                await self.session.rollback()
+                raise
+        
+        # Build response
+        deleted_count = len(deleted_user_ids)
+        skipped_count = len(skipped_user_ids)
+        
+        return BulkDeleteResponse(
+            deleted_count=deleted_count,
+            skipped_count=skipped_count,
+            deleted_user_ids=deleted_user_ids,
+            skipped_user_ids=skipped_user_ids,
+            skipped_reasons=skipped_reasons,
+        )

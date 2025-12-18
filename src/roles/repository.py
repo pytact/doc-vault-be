@@ -1,7 +1,8 @@
 """Role repository."""
 from uuid import UUID
 from typing import Optional
-from sqlalchemy import select
+from datetime import datetime, timezone
+from sqlalchemy import select, false
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.roles.models import Role, UserRole
 
@@ -68,7 +69,6 @@ class RoleRepository:
         self, user_id: UUID, family_id: UUID
     ) -> list[UserRole]:
         """Get all user roles by user_id and family_id (not soft-deleted)."""
-        from sqlalchemy import false
         result = await self.session.execute(
             select(UserRole)
             .where(
@@ -119,7 +119,6 @@ class RoleRepository:
         self, user_role: UserRole, deleted_by: UUID
     ) -> None:
         """Soft delete a user role assignment."""
-        from datetime import datetime, timezone
         user_role.is_del = True
         user_role.deleted_at = datetime.now(timezone.utc)
         user_role.deleted_by = deleted_by

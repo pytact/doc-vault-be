@@ -133,3 +133,20 @@ class UserApiDocs:
             "for users in their own family. Generates new invitation token and sets new expiration (24 hours)."
         ),
     }
+    
+    # ==================== SuperAdmin User Management ====================
+    
+    reassign_user: ClassVar[dict] = {
+        "summary": "Purpose of this API is to reassign a user to a different family",
+        "description": "Reassigns a user to a different family with optional role change. SuperAdmin only. Moves user to new family, moves all user-owned documents to new family, deletes all existing DocumentAssignments for the user, and cancels all ReminderSchedules for the user. If role_id is provided, assigns new role simultaneously. If role_id is not provided, user keeps existing role in new family context."
+    }
+    
+    reactivate_user: ClassVar[dict] = {
+        "summary": "Purpose of this API is to reactivate a soft-deleted user",
+        "description": "Reactivates a soft-deleted user. SuperAdmin only. Changes user status from SoftDeleted to Active. Sets is_del = false and clears deleted_at and deleted_by fields. User's family must not be soft-deleted. If user is already active, operation is idempotent and returns success. Follows F-001 reactivation rules."
+    }
+    
+    bulk_delete_users: ClassVar[dict] = {
+        "summary": "Purpose of this API is to bulk soft-delete multiple users at once",
+        "description": "Bulk soft-deletes multiple users at once. SuperAdmin only. Accepts array of user IDs (min 1, max 100, all UUIDs must be unique). Validation phase identifies users to skip (not found or already soft-deleted). Transaction phase soft-deletes all valid users atomically, cascades to user-owned documents, deletes all DocumentAssignments, and cancels all ReminderSchedules. Returns summary of deleted users and skipped users with reasons."
+    }

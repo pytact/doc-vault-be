@@ -42,3 +42,22 @@ SORT_FIELD_CREATED_AT = "created_at"
 # Sort Orders
 SORT_ORDER_ASC = "asc"
 SORT_ORDER_DESC = "desc"
+
+# ==================== SuperAdmin User Management Constants ====================
+
+# Error Messages
+ERROR_FAMILY_NOT_FOUND = "Target family not found or is soft-deleted"
+ERROR_ROLE_NOT_FOUND = "Role not found"
+ERROR_CANNOT_REACTIVATE_IN_SOFT_DELETED_FAMILY = "Cannot reactivate user. User's family is soft-deleted."
+ERROR_DUPLICATE_USER_IDS = "Duplicate user IDs are not allowed"
+
+# Success Messages
+SUCCESS_USER_REASSIGNED = "User reassigned successfully"
+SUCCESS_USER_REACTIVATED = "User reactivated successfully"
+SUCCESS_BULK_DELETE_COMPLETED = "Bulk delete completed"
+
+# Error Codes
+ERROR_CODE_FAMILY_NOT_FOUND = "FAMILY_NOT_FOUND"
+ERROR_CODE_ROLE_NOT_FOUND = "ROLE_NOT_FOUND"
+ERROR_CODE_BUSINESS_RULE_FAILED = "BUSINESS_RULE_FAILED"
+ERROR_CODE_VALIDATION_FAILED = "VALIDATION_FAILED"
