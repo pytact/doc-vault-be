@@ -135,7 +135,7 @@ class UserService:
         
         return UserListRead(
             id=user.id,
-            name=user.email,  # TODO: User model needs name field - using email as fallback
+            name=user.name or user.email,  # Fallback to email if name is None
             email=user.email,
             status=status_api,
             invite_sent_at=user.invite_sent_at,
@@ -182,7 +182,7 @@ class UserService:
         
         result = UserDetailRead(
             id=user.id,
-            name=user.email,  # TODO: User model needs name field - using email as fallback
+            name=user.name or user.email,  # Fallback to email if name is None
             email=user.email,
             family_id=family_id,  # Always use the family_id from path parameter
             status=status_api,
@@ -836,8 +836,7 @@ class UserService:
                 user_role_name = role.name
         
         # Update user: set password, status, activated_at, clear invite fields
-        # Note: User model needs name field - storing name will be handled when model is updated
-        # TODO: Add name field to User model and set it here: user.name = data.name
+        user.name = data.name
         user.hash_password = get_password_hash(data.password)
         user.status = "active"
         user.activated_at = now
@@ -929,12 +928,10 @@ class UserService:
         can_edit_profile = status_api == USER_STATUS_API_ACTIVE
         
         # Build profile response
-        # Note: User model needs name field - using email as fallback for now
-        # TODO: Add name field to User model
         profile_read = UserProfileRead(
             id=user.id,
             email=user.email,
-            name=user.email,  # TODO: Use user.name when field is added
+            name=user.name,
             status=status_api,
             family_id=family_id,
             family_name=family_name,
@@ -1052,7 +1049,7 @@ class UserService:
         user_me_read = UserMeRead(
             id=user.id,
             email=user.email,
-            name=user.email,  # TODO: Use user.name when field is added
+            name=user.name or user.email,  # Fallback to email if name is None
             status=status_api,
             family=family_obj,
             role=role_obj,
@@ -1172,11 +1169,8 @@ class UserService:
             user.hash_password = get_password_hash(data.password)
         
         # Update user name if provided
-        # Note: User model needs name field - for now we'll store it when model is updated
-        # TODO: Add name field to User model and set it here: user.name = data.name
         if data.name is not None:
-            # Name update logic here (when User model has name field)
-            pass
+            user.name = data.name
         
         user.updated_at = datetime.now(timezone.utc)
         user.updated_by = user_id
@@ -1189,8 +1183,8 @@ class UserService:
         can_edit_profile = status_api == USER_STATUS_API_ACTIVE
         
         # Build profile response
-        # Use updated name from request if provided, otherwise use existing (email as fallback for now)
-        display_name = data.name if data.name is not None else user.email  # TODO: Use user.name when field is added
+        # Use the updated user name from database, fallback to email if None
+        display_name = user.name or user.email
         profile_read = UserProfileRead(
             id=user.id,
             email=user.email,

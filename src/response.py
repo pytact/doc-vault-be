@@ -38,7 +38,7 @@ class ServiceResponse(Generic[T]):
 
         response = JSONResponse(
             status_code=self.status_code,
-            content=StandardResponse(data=self.data, message=message).model_dump()
+            content=StandardResponse(data=self.data, message=message).model_dump(mode="json")
         )
         for key, value in self.headers.items():
             response.headers[key] = value
